@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.List;
 
+@CrossOrigin(origins = "http://localhost:3000")
 @RestController
 @RequestMapping("/rest")
 public class FileController {
