@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: io.backend.fileservice.FileserviceApplicationTests
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.964 s -- in io.backend.fileservice.FileserviceApplicationTests

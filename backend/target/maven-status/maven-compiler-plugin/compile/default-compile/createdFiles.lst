@@ -1,3 +1,4 @@
+io/backend/fileservice/S3Request.class
 io/backend/fileservice/FileserviceApplication.class
 io/backend/fileservice/FileController.class
 io/backend/fileservice/FileService.class

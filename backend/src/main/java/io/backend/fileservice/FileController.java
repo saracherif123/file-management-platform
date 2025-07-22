@@ -8,10 +8,25 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.core.io.Resource;
+import org.springframework.web.bind.annotation.RequestBody;
+import java.util.Collections;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.List;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.S3Object;
+import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import software.amazon.awssdk.services.s3.model.CommonPrefix;
+import java.util.HashMap;
+import java.util.Map;
 
 @CrossOrigin(origins = "http://localhost:3000")
 @RestController
@@ -56,6 +71,52 @@ public class FileController {
         } catch (IOException ex) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    @PostMapping("/list-s3")
+    public ResponseEntity<Map<String, Object>> listS3(@RequestBody S3Request s3Request) {
+        try {
+            AwsBasicCredentials awsCreds = AwsBasicCredentials.create(
+                s3Request.getAccessKey(), s3Request.getSecretKey()
+            );
+            S3Client s3 = S3Client.builder()
+                .region(Region.EU_CENTRAL_1) // Change to your region if needed
+                .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
+                .build();
+
+            ListObjectsV2Request listReq = ListObjectsV2Request.builder()
+                .bucket(s3Request.getBucket())
+                .prefix(s3Request.getPath() != null ? s3Request.getPath() : "")
+                .delimiter("/")
+                .build();
+
+            ListObjectsV2Response listRes = s3.listObjectsV2(listReq);
+
+            List<String> fileNames = listRes.contents().stream()
+                .map(S3Object::key)
+                .filter(key -> !key.equals(s3Request.getPath())) // Exclude the folder itself
+                .collect(Collectors.toList());
+            List<String> folders = listRes.commonPrefixes().stream()
+                .map(CommonPrefix::prefix)
+                .collect(Collectors.toList());
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("files", fileNames);
+            result.put("folders", folders);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Error: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+
+    @PostMapping("/load-s3")
+    public ResponseEntity<String> loadS3Files(@RequestBody S3Request s3Request) {
+        Logger logger = LoggerFactory.getLogger(FileController.class);
+        logger.info("Received S3 files to load: {}", s3Request.getFiles());
+        // Here you can process the files as needed
+        return ResponseEntity.ok("S3 files received for processing.");
     }
 
     @DeleteMapping("/delete/{filename}")

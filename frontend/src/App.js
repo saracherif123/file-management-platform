@@ -1,8 +1,8 @@
 import React from 'react';
-import FileManager from './FileManager';
+import ImportWizard from './ImportWizard';
 
 function App() {
-  return <FileManager />;
+  return <ImportWizard />;
 }
 
 export default App;

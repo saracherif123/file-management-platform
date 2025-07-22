@@ -1,24 +1,100 @@
 import React, { useState } from 'react';
-import { Box, Paper, Stack, Typography, Select, MenuItem, FormControl, InputLabel, TextField, Button, Snackbar, Alert } from '@mui/material';
-
-const SOURCES = ['Local', 'S3'];
+import { Box, Paper, Stack, Typography, Select, MenuItem, FormControl, InputLabel, TextField, Button, Snackbar, Alert, List, ListItem, ListItemText, Checkbox, ListItemButton } from '@mui/material';
+import FileManager from './FileManager';
 
 export default function ImportWizard() {
   const [source, setSource] = useState('Local');
-  const [s3Options, setS3Options] = useState({ accessKey: '', secretKey: '', bucket: '' });
+  const [s3Options, setS3Options] = useState({ accessKey: '', secretKey: '', bucket: '', path: '' });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  const [s3Files, setS3Files] = useState([]);
+  const [s3Folders, setS3Folders] = useState([]);
+  const [selectedS3Files, setSelectedS3Files] = useState([]);
+  const [s3Loading, setS3Loading] = useState(false);
 
   const handleSourceChange = (e) => {
     setSource(e.target.value);
+    setS3Files([]);
+    setS3Folders([]);
+    setSelectedS3Files([]);
+    setS3Options({ ...s3Options, path: '' });
+  };
+  const handleS3Change = (e) => setS3Options({ ...s3Options, [e.target.name]: e.target.value });
+
+  const fetchS3Contents = async (customPath) => {
+    setS3Loading(true);
+    setS3Files([]);
+    setS3Folders([]);
+    setSelectedS3Files([]);
+    try {
+      const res = await fetch('http://localhost:8080/rest/list-s3', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...s3Options, path: customPath !== undefined ? customPath : s3Options.path }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setSnackbar({ open: true, message: data.error, severity: 'error' });
+        setS3Files([]);
+        setS3Folders([]);
+      } else {
+        setS3Files(data.files || []);
+        setS3Folders(data.folders || []);
+        setSnackbar({ open: true, message: `Connected. Found ${data.files.length} files and ${data.folders.length} folders.`, severity: 'success' });
+      }
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
+      setS3Files([]);
+      setS3Folders([]);
+    } finally {
+      setS3Loading(false);
+    }
   };
 
-  const handleS3Change = (e) => {
-    setS3Options({ ...s3Options, [e.target.name]: e.target.value });
+  const handleConnectS3 = () => {
+    fetchS3Contents();
   };
 
-  // Placeholder for file explorer and load button
-  const handleLoad = () => {
-    setSnackbar({ open: true, message: 'Load triggered (placeholder)', severity: 'info' });
+  const handleNavigateFolder = (folder) => {
+    setS3Options((prev) => ({ ...prev, path: folder }));
+    fetchS3Contents(folder);
+  };
+
+  const handleBack = () => {
+    // Remove last segment from path
+    const path = s3Options.path;
+    if (!path) return;
+    const parts = path.endsWith('/') ? path.slice(0, -1).split('/') : path.split('/');
+    parts.pop();
+    const newPath = parts.length > 0 ? parts.join('/') + '/' : '';
+    setS3Options((prev) => ({ ...prev, path: newPath }));
+    fetchS3Contents(newPath);
+  };
+
+  const handleToggleS3File = (file) => {
+    setSelectedS3Files((prev) =>
+      prev.includes(file) ? prev.filter(f => f !== file) : [...prev, file]
+    );
+  };
+
+  const handleLoad = async () => {
+    if (source === 'S3') {
+      if (selectedS3Files.length === 0) {
+        setSnackbar({ open: true, message: 'Please select at least one S3 file to load.', severity: 'warning' });
+        return;
+      }
+      try {
+        const res = await fetch('http://localhost:8080/rest/load-s3', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...s3Options, files: selectedS3Files }),
+        });
+        if (!res.ok) throw new Error('Failed to load selected S3 files');
+        setSnackbar({ open: true, message: 'Selected S3 files sent to backend for processing.', severity: 'success' });
+      } catch (err) {
+        setSnackbar({ open: true, message: err.message, severity: 'error' });
+      }
+    }
+    // For Local, FileManager handles loading
   };
 
   return (
@@ -34,9 +110,8 @@ export default function ImportWizard() {
               label="Source"
               onChange={handleSourceChange}
             >
-              {SOURCES.map(src => (
-                <MenuItem key={src} value={src}>{src}</MenuItem>
-              ))}
+              <MenuItem value="Local">Local</MenuItem>
+              <MenuItem value="S3">S3</MenuItem>
             </Select>
           </FormControl>
           {source === 'S3' && (
@@ -57,21 +132,56 @@ export default function ImportWizard() {
                 type="password"
               />
               <TextField
-                label="Bucket/Path"
+                label="Bucket"
                 name="bucket"
                 value={s3Options.bucket}
                 onChange={handleS3Change}
                 size="small"
               />
+              <TextField
+                label="Path"
+                name="path"
+                value={s3Options.path}
+                onChange={handleS3Change}
+                size="small"
+              />
+              <Button variant="outlined" onClick={handleConnectS3} disabled={s3Loading}>
+                {s3Loading ? 'Connecting...' : 'Connect'}
+              </Button>
             </Stack>
           )}
         </Stack>
-        {/* Placeholder for FileExplorer */}
-        <Box sx={{ my: 3, p: 2, border: '1px dashed #ccc', borderRadius: 2, minHeight: 200, textAlign: 'center' }}>
-          <Typography variant="body1" color="text.secondary">File Explorer will go here</Typography>
-        </Box>
-        <Stack direction="row" justifyContent="flex-end">
-          <Button variant="contained" onClick={handleLoad}>Load</Button>
+        {source === 'Local' && <FileManager />}
+        {source === 'S3' && (s3Files.length > 0 || s3Folders.length > 0) && (
+          <Box sx={{ my: 3 }}>
+            <Typography variant="h6">S3 Folders & Files</Typography>
+            {s3Options.path && (
+              <Button size="small" onClick={handleBack} sx={{ mb: 1 }}>
+                Back
+              </Button>
+            )}
+            <List>
+              {s3Folders.map((folder, idx) => (
+                <ListItemButton key={folder} onClick={() => handleNavigateFolder(folder)}>
+                  <ListItemText primary={folder} primaryTypographyProps={{ fontWeight: 'bold' }} />
+                </ListItemButton>
+              ))}
+              {s3Files.map((file, idx) => (
+                <ListItem key={file} disablePadding secondaryAction={
+                  <Checkbox
+                    edge="end"
+                    checked={selectedS3Files.includes(file)}
+                    onChange={() => handleToggleS3File(file)}
+                  />
+                }>
+                  <ListItemText primary={file} />
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        )}
+        <Stack direction="row" justifyContent="flex-end" mt={2}>
+          <Button variant="contained" onClick={handleLoad} disabled={source === 'S3' && s3Files.length === 0}>Load</Button>
         </Stack>
         <Snackbar
           open={snackbar.open}
