@@ -2,9 +2,21 @@ import React, { useState } from 'react';
 import { Box, Paper, Stack, Typography, Select, MenuItem, FormControl, InputLabel, TextField, Button, Snackbar, Alert, List, ListItem, ListItemText, Checkbox, ListItemButton } from '@mui/material';
 import FileManager from './FileManager';
 
+function parseS3Path(s3Path) {
+  // Accepts s3://bucket/prefix/ or bucket/prefix/
+  let path = s3Path.trim();
+  if (path.startsWith('s3://')) path = path.slice(5);
+  const firstSlash = path.indexOf('/');
+  if (firstSlash === -1) return { bucket: path, prefix: '' };
+  const bucket = path.slice(0, firstSlash);
+  let prefix = path.slice(firstSlash + 1);
+  if (prefix && !prefix.endsWith('/')) prefix += '/';
+  return { bucket, prefix };
+}
+
 export default function ImportWizard() {
   const [source, setSource] = useState('Local');
-  const [s3Options, setS3Options] = useState({ accessKey: '', secretKey: '', bucket: '', path: '' });
+  const [s3Options, setS3Options] = useState({ accessKey: '', secretKey: '', s3path: '' });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [s3Files, setS3Files] = useState([]);
   const [s3Folders, setS3Folders] = useState([]);
@@ -16,20 +28,31 @@ export default function ImportWizard() {
     setS3Files([]);
     setS3Folders([]);
     setSelectedS3Files([]);
-    setS3Options({ ...s3Options, path: '' });
+    setS3Options({ ...s3Options, s3path: '' });
   };
   const handleS3Change = (e) => setS3Options({ ...s3Options, [e.target.name]: e.target.value });
 
-  const fetchS3Contents = async (customPath) => {
+  const fetchS3Contents = async (customPrefix) => {
     setS3Loading(true);
     setS3Files([]);
     setS3Folders([]);
     setSelectedS3Files([]);
+    const { bucket, prefix } = parseS3Path(s3Options.s3path);
+    if (!bucket) {
+      setSnackbar({ open: true, message: 'Please enter a valid S3 path (e.g. s3://bucket/prefix/ or bucket/prefix/)', severity: 'warning' });
+      setS3Loading(false);
+      return;
+    }
     try {
       const res = await fetch('http://localhost:8080/rest/list-s3', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...s3Options, path: customPath !== undefined ? customPath : s3Options.path }),
+        body: JSON.stringify({
+          accessKey: s3Options.accessKey,
+          secretKey: s3Options.secretKey,
+          bucket,
+          path: customPrefix !== undefined ? customPrefix : prefix,
+        }),
       });
       const data = await res.json();
       if (data.error) {
@@ -55,19 +78,19 @@ export default function ImportWizard() {
   };
 
   const handleNavigateFolder = (folder) => {
-    setS3Options((prev) => ({ ...prev, path: folder }));
+    const { bucket } = parseS3Path(s3Options.s3path);
+    setS3Options((prev) => ({ ...prev, s3path: `s3://${bucket}/${folder}` }));
     fetchS3Contents(folder);
   };
 
   const handleBack = () => {
-    // Remove last segment from path
-    const path = s3Options.path;
-    if (!path) return;
-    const parts = path.endsWith('/') ? path.slice(0, -1).split('/') : path.split('/');
+    const { bucket, prefix } = parseS3Path(s3Options.s3path);
+    if (!prefix) return;
+    const parts = prefix.endsWith('/') ? prefix.slice(0, -1).split('/') : prefix.split('/');
     parts.pop();
-    const newPath = parts.length > 0 ? parts.join('/') + '/' : '';
-    setS3Options((prev) => ({ ...prev, path: newPath }));
-    fetchS3Contents(newPath);
+    const newPrefix = parts.length > 0 ? parts.join('/') + '/' : '';
+    setS3Options((prev) => ({ ...prev, s3path: `s3://${bucket}/${newPrefix}` }));
+    fetchS3Contents(newPrefix);
   };
 
   const handleToggleS3File = (file) => {
@@ -82,11 +105,18 @@ export default function ImportWizard() {
         setSnackbar({ open: true, message: 'Please select at least one S3 file to load.', severity: 'warning' });
         return;
       }
+      const { bucket, prefix } = parseS3Path(s3Options.s3path);
       try {
         const res = await fetch('http://localhost:8080/rest/load-s3', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...s3Options, files: selectedS3Files }),
+          body: JSON.stringify({
+            accessKey: s3Options.accessKey,
+            secretKey: s3Options.secretKey,
+            bucket,
+            path: prefix,
+            files: selectedS3Files,
+          }),
         });
         if (!res.ok) throw new Error('Failed to load selected S3 files');
         setSnackbar({ open: true, message: 'Selected S3 files sent to backend for processing.', severity: 'success' });
@@ -132,18 +162,12 @@ export default function ImportWizard() {
                 type="password"
               />
               <TextField
-                label="Bucket"
-                name="bucket"
-                value={s3Options.bucket}
+                label="S3 Path (e.g. s3://bucket/prefix/)"
+                name="s3path"
+                value={s3Options.s3path}
                 onChange={handleS3Change}
                 size="small"
-              />
-              <TextField
-                label="Path"
-                name="path"
-                value={s3Options.path}
-                onChange={handleS3Change}
-                size="small"
+                sx={{ minWidth: 300 }}
               />
               <Button variant="outlined" onClick={handleConnectS3} disabled={s3Loading}>
                 {s3Loading ? 'Connecting...' : 'Connect'}
@@ -155,7 +179,7 @@ export default function ImportWizard() {
         {source === 'S3' && (s3Files.length > 0 || s3Folders.length > 0) && (
           <Box sx={{ my: 3 }}>
             <Typography variant="h6">S3 Folders & Files</Typography>
-            {s3Options.path && (
+            {parseS3Path(s3Options.s3path).prefix && (
               <Button size="small" onClick={handleBack} sx={{ mb: 1 }}>
                 Back
               </Button>
