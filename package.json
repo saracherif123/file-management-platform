@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@mui/lab": "^7.0.0-beta.14",
+    "react-treebeard": "^3.2.4"
+  }
+}

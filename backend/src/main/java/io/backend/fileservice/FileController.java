@@ -100,9 +100,54 @@ public class FileController {
                 .map(CommonPrefix::prefix)
                 .collect(Collectors.toList());
 
+            // New: For each folder, count the number of files recursively (all files under the prefix)
+            Map<String, Integer> folderFileCounts = new HashMap<>();
+            for (String folderPrefix : folders) {
+                int count = 0;
+                String continuationToken = null;
+                do {
+                    ListObjectsV2Request.Builder folderReqBuilder = ListObjectsV2Request.builder()
+                        .bucket(s3Request.getBucket())
+                        .prefix(folderPrefix);
+                    if (continuationToken != null) {
+                        folderReqBuilder.continuationToken(continuationToken);
+                    }
+                    ListObjectsV2Request folderReq = folderReqBuilder.build();
+                    ListObjectsV2Response folderRes = s3.listObjectsV2(folderReq);
+                    // Exclude the folder itself from the count
+                    count += folderRes.contents().stream()
+                        .map(S3Object::key)
+                        .filter(key -> !key.equals(folderPrefix))
+                        .count();
+                    continuationToken = folderRes.nextContinuationToken();
+                } while (continuationToken != null);
+                folderFileCounts.put(folderPrefix, count);
+            }
+
+            // New: Count all files recursively under the current path
+            int recursiveFileCount = 0;
+            String continuationToken = null;
+            do {
+                ListObjectsV2Request.Builder reqBuilder = ListObjectsV2Request.builder()
+                    .bucket(s3Request.getBucket())
+                    .prefix(s3Request.getPath() != null ? s3Request.getPath() : "");
+                if (continuationToken != null) {
+                    reqBuilder.continuationToken(continuationToken);
+                }
+                ListObjectsV2Request req = reqBuilder.build();
+                ListObjectsV2Response res = s3.listObjectsV2(req);
+                recursiveFileCount += res.contents().stream()
+                    .map(S3Object::key)
+                    .filter(key -> !(s3Request.getPath() != null && key.equals(s3Request.getPath())))
+                    .count();
+                continuationToken = res.nextContinuationToken();
+            } while (continuationToken != null);
+
             Map<String, Object> result = new HashMap<>();
             result.put("files", fileNames);
             result.put("folders", folders);
+            result.put("folderFileCounts", folderFileCounts); // New field
+            result.put("recursiveFileCount", recursiveFileCount); // New field
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             Map<String, Object> error = new HashMap<>();

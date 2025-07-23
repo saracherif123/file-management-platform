@@ -28,6 +28,8 @@ export default function ImportWizard() {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [s3Files, setS3Files] = useState([]);
   const [s3Folders, setS3Folders] = useState([]);
+  const [folderFileCounts, setFolderFileCounts] = useState({});
+  const [recursiveFileCount, setRecursiveFileCount] = useState(null);
   const [selectedS3Files, setSelectedS3Files] = useState([]);
   const [s3Loading, setS3Loading] = useState(false);
 
@@ -67,15 +69,21 @@ export default function ImportWizard() {
         setSnackbar({ open: true, message: data.error, severity: 'error' });
         setS3Files([]);
         setS3Folders([]);
+        setFolderFileCounts({});
+        setRecursiveFileCount(null);
       } else {
         setS3Files(data.files || []);
         setS3Folders(data.folders || []);
+        setFolderFileCounts(data.folderFileCounts || {});
+        setRecursiveFileCount(data.recursiveFileCount ?? null);
         setSnackbar({ open: true, message: `Connected. Found ${data.files.length} files and ${data.folders.length} folders.`, severity: 'success' });
       }
     } catch (err) {
       setSnackbar({ open: true, message: err.message, severity: 'error' });
       setS3Files([]);
       setS3Folders([]);
+      setFolderFileCounts({});
+      setRecursiveFileCount(null);
     } finally {
       setS3Loading(false);
     }
@@ -135,6 +143,13 @@ export default function ImportWizard() {
     // For Local, FileManager handles loading
   };
 
+  // Helper to format counts for display
+  function formatCount(count) {
+    if (count === null || count === undefined) return '?';
+    if (count > 1000) return '>1000';
+    return count;
+  }
+
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
       <Paper sx={{ p: 3 }}>
@@ -187,6 +202,18 @@ export default function ImportWizard() {
         {source === 'S3' && (s3Files.length > 0 || s3Folders.length > 0) && (
           <Box sx={{ my: 3 }}>
             <Typography variant="h6">S3 Folders & Files</Typography>
+            {/* Show counts for current path and selected files */}
+            <Box sx={{ display: 'flex', gap: 3, mb: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                Files in this path: <b>{formatCount(recursiveFileCount !== null ? recursiveFileCount : s3Files.length)}</b>
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Folders in this path: <b>{formatCount(s3Folders.length)}</b>
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Imported (selected): <b>{formatCount(selectedS3Files.length)}</b>
+              </Typography>
+            </Box>
             {parseS3Path(s3Options.s3path).prefix && (
               <Button size="small" onClick={handleBack} sx={{ mb: 1 }}>
                 Back
@@ -196,7 +223,17 @@ export default function ImportWizard() {
               {s3Folders.map((folder, idx) => (
                 <ListItemButton key={folder} onClick={() => handleNavigateFolder(folder)}>
                   <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
-                  <ListItemText primary={folder} primaryTypographyProps={{ fontWeight: 'bold' }} />
+                  <ListItemText
+                    primary={
+                      <span>
+                        {folder}
+                        <span style={{ color: '#888', fontSize: '0.9em', marginLeft: 8 }}>
+                          (files: {formatCount(folderFileCounts[folder])})
+                        </span>
+                      </span>
+                    }
+                    primaryTypographyProps={{ fontWeight: 'bold' }}
+                  />
                 </ListItemButton>
               ))}
               {s3Files.map((file, idx) => (
