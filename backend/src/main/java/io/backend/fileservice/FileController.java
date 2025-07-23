@@ -156,6 +156,47 @@ public class FileController {
         }
     }
 
+    @PostMapping("/list-s3-files-in-folder")
+    public ResponseEntity<Map<String, Object>> listS3FilesInFolder(@RequestBody S3Request s3Request) {
+        try {
+            AwsBasicCredentials awsCreds = AwsBasicCredentials.create(
+                s3Request.getAccessKey(), s3Request.getSecretKey()
+            );
+            S3Client s3 = S3Client.builder()
+                .region(Region.EU_CENTRAL_1)
+                .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
+                .build();
+
+            List<String> allFiles = new java.util.ArrayList<>();
+            String continuationToken = null;
+            do {
+                ListObjectsV2Request.Builder reqBuilder = ListObjectsV2Request.builder()
+                    .bucket(s3Request.getBucket())
+                    .prefix(s3Request.getPath() != null ? s3Request.getPath() : "");
+                if (continuationToken != null) {
+                    reqBuilder.continuationToken(continuationToken);
+                }
+                ListObjectsV2Request req = reqBuilder.build();
+                ListObjectsV2Response res = s3.listObjectsV2(req);
+                for (S3Object obj : res.contents()) {
+                    // Exclude the folder itself
+                    if (!(s3Request.getPath() != null && obj.key().equals(s3Request.getPath()))) {
+                        allFiles.add(obj.key());
+                    }
+                }
+                continuationToken = res.nextContinuationToken();
+            } while (continuationToken != null);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("files", allFiles);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Error: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+
     @PostMapping("/load-s3")
     public ResponseEntity<String> loadS3Files(@RequestBody S3Request s3Request) {
         Logger logger = LoggerFactory.getLogger(FileController.class);

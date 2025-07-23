@@ -32,6 +32,7 @@ export default function ImportWizard() {
   const [recursiveFileCount, setRecursiveFileCount] = useState(null);
   const [selectedS3Files, setSelectedS3Files] = useState([]);
   const [s3Loading, setS3Loading] = useState(false);
+  const [folderLoading, setFolderLoading] = useState({}); // { [folder]: boolean }
 
   const handleSourceChange = (e) => {
     setSource(e.target.value);
@@ -143,6 +144,66 @@ export default function ImportWizard() {
     // For Local, FileManager handles loading
   };
 
+  // Helper: fetch all files under a folder (recursively)
+  const fetchAllFilesInFolder = async (folderPrefix) => {
+    const { bucket } = parseS3Path(s3Options.s3path);
+    const res = await fetch('http://localhost:8080/rest/list-s3-files-in-folder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accessKey: s3Options.accessKey,
+        secretKey: s3Options.secretKey,
+        bucket,
+        path: folderPrefix,
+      }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data.files || [];
+  };
+
+  // Folder selection logic
+  const handleToggleS3Folder = async (folder) => {
+    setFolderLoading((prev) => ({ ...prev, [folder]: true }));
+    try {
+      const filesInFolder = await fetchAllFilesInFolder(folder);
+      const allSelected = filesInFolder.every(f => selectedS3Files.includes(f));
+      if (allSelected) {
+        // Unselect all files in this folder
+        setSelectedS3Files(prev => prev.filter(f => !filesInFolder.includes(f)));
+      } else {
+        // Select all files in this folder (add any not already selected)
+        setSelectedS3Files(prev => Array.from(new Set([...prev, ...filesInFolder])));
+      }
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
+    } finally {
+      setFolderLoading((prev) => ({ ...prev, [folder]: false }));
+    }
+  };
+
+  // Helper: folder checkbox state
+  const getFolderCheckboxState = (folder) => {
+    const count = folderFileCounts[folder];
+    if (!count || count === 0) return { checked: false, indeterminate: false };
+    // We need to know all files in the folder to check selection state
+    // For performance, if count > 1000, just show unchecked unless all files are selected
+    // (or you can fetch on click)
+    // For now, we will not show indeterminate for >1000
+    // But for small folders, we can check
+    // We'll use a best-effort: if all files in selectedS3Files, checked; if some, indeterminate
+    const filesInFolder = Object.keys(folderFileCounts).length && folderFileCounts[folder] <= 1000 ? null : null; // Not used for now
+    // We'll just use checked if any file in selectedS3Files starts with folder
+    const selectedInFolder = selectedS3Files.filter(f => f.startsWith(folder));
+    if (selectedInFolder.length === 0) return { checked: false, indeterminate: false };
+    if (folderFileCounts[folder] > 1000) {
+      // For large folders, just show checked if any selected
+      return { checked: true, indeterminate: false };
+    }
+    if (selectedInFolder.length === folderFileCounts[folder]) return { checked: true, indeterminate: false };
+    return { checked: false, indeterminate: true };
+  };
+
   // Helper to format counts for display
   function formatCount(count) {
     if (count === null || count === undefined) return '?';
@@ -220,22 +281,33 @@ export default function ImportWizard() {
               </Button>
             )}
             <List>
-              {s3Folders.map((folder, idx) => (
-                <ListItemButton key={folder} onClick={() => handleNavigateFolder(folder)}>
-                  <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
-                  <ListItemText
-                    primary={
-                      <span>
-                        {folder}
-                        <span style={{ color: '#888', fontSize: '0.9em', marginLeft: 8 }}>
-                          (files: {formatCount(folderFileCounts[folder])})
+              {s3Folders.map((folder, idx) => {
+                const { checked, indeterminate } = getFolderCheckboxState(folder);
+                return (
+                  <ListItemButton key={folder} onClick={() => handleNavigateFolder(folder)}>
+                    <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
+                    <Checkbox
+                      edge="start"
+                      checked={checked}
+                      indeterminate={indeterminate}
+                      disabled={folderLoading[folder]}
+                      onClick={e => { e.stopPropagation(); handleToggleS3Folder(folder); }}
+                      sx={{ mr: 1 }}
+                    />
+                    <ListItemText
+                      primary={
+                        <span>
+                          {folder}
+                          <span style={{ color: '#888', fontSize: '0.9em', marginLeft: 8 }}>
+                            (files: {formatCount(folderFileCounts[folder])})
+                          </span>
                         </span>
-                      </span>
-                    }
-                    primaryTypographyProps={{ fontWeight: 'bold' }}
-                  />
-                </ListItemButton>
-              ))}
+                      }
+                      primaryTypographyProps={{ fontWeight: 'bold' }}
+                    />
+                  </ListItemButton>
+                );
+              })}
               {s3Files.map((file, idx) => (
                 <ListItem key={file} disablePadding secondaryAction={
                   <Checkbox
