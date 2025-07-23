@@ -25,6 +25,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import SearchIcon from '@mui/icons-material/Search';
 import { styled } from '@mui/material/styles';
 import * as api from './api';
+import { FaFileCsv, FaFileAlt, FaFileCode, FaFile } from 'react-icons/fa';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const FILE_TYPES = ['All', 'csv', 'json', 'txt', 'parquet'];
@@ -39,6 +40,14 @@ const DragDropArea = styled(Box)(({ theme, isdragover }) => ({
   cursor: 'pointer',
   marginBottom: theme.spacing(2),
 }));
+
+function getFileIcon(filename) {
+  if (filename.endsWith('.csv')) return <FaFileCsv color="#2a9d8f" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.json')) return <FaFileCode color="#e76f51" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.parquet')) return <FaFileAlt color="#264653" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.txt')) return <FaFileAlt color="#6d6875" style={{ marginRight: 8 }} />;
+  return <FaFile style={{ marginRight: 8 }} />;
+}
 
 export default function FileManager() {
   const [files, setFiles] = useState([]);
@@ -248,7 +257,7 @@ export default function FileManager() {
                 checked={selectedFiles.includes(filename)}
                 onChange={() => handleToggle(filename)}
               />
-              <ListItemText primary={filename} />
+              <ListItemText primary={<span>{getFileIcon(filename)}{filename}</span>} />
             </ListItem>
           ))}
         </List>

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Box, Paper, Stack, Typography, Select, MenuItem, FormControl, InputLabel, TextField, Button, Snackbar, Alert, List, ListItem, ListItemText, Checkbox, ListItemButton } from '@mui/material';
+import { FaFolder, FaFileCsv, FaFileAlt, FaFileCode, FaFile } from 'react-icons/fa';
 import FileManager from './FileManager';
 
 function parseS3Path(s3Path) {
-  // Accepts s3://bucket/prefix/ or bucket/prefix/
   let path = s3Path.trim();
   if (path.startsWith('s3://')) path = path.slice(5);
   const firstSlash = path.indexOf('/');
@@ -12,6 +12,14 @@ function parseS3Path(s3Path) {
   let prefix = path.slice(firstSlash + 1);
   if (prefix && !prefix.endsWith('/')) prefix += '/';
   return { bucket, prefix };
+}
+
+function getFileIcon(filename) {
+  if (filename.endsWith('.csv')) return <FaFileCsv color="#2a9d8f" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.json')) return <FaFileCode color="#e76f51" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.parquet')) return <FaFileAlt color="#264653" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.txt')) return <FaFileAlt color="#6d6875" style={{ marginRight: 8 }} />;
+  return <FaFile style={{ marginRight: 8 }} />;
 }
 
 export default function ImportWizard() {
@@ -187,6 +195,7 @@ export default function ImportWizard() {
             <List>
               {s3Folders.map((folder, idx) => (
                 <ListItemButton key={folder} onClick={() => handleNavigateFolder(folder)}>
+                  <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
                   <ListItemText primary={folder} primaryTypographyProps={{ fontWeight: 'bold' }} />
                 </ListItemButton>
               ))}
@@ -198,7 +207,7 @@ export default function ImportWizard() {
                     onChange={() => handleToggleS3File(file)}
                   />
                 }>
-                  <ListItemText primary={file} />
+                  <ListItemText primary={<span>{getFileIcon(file)}{file}</span>} />
                 </ListItem>
               ))}
             </List>
