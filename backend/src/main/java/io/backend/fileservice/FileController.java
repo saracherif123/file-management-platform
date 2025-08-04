@@ -14,19 +14,10 @@ import java.util.Collections;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.List;
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
-import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
-import software.amazon.awssdk.services.s3.model.S3Object;
-import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import software.amazon.awssdk.services.s3.model.CommonPrefix;
 import java.util.HashMap;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @CrossOrigin(origins = "http://localhost:3000")
 @RestController
@@ -34,10 +25,12 @@ import java.util.Map;
 public class FileController {
 
     private final FileService fileService;
+    private final S3Service s3Service;
 
     @Autowired
-    public FileController(FileService fileService) {
+    public FileController(FileService fileService, S3Service s3Service) {
         this.fileService = fileService;
+        this.s3Service = s3Service;
     }
 
     @PostMapping("/upload")
@@ -76,78 +69,7 @@ public class FileController {
     @PostMapping("/list-s3")
     public ResponseEntity<Map<String, Object>> listS3(@RequestBody S3Request s3Request) {
         try {
-            AwsBasicCredentials awsCreds = AwsBasicCredentials.create(
-                s3Request.getAccessKey(), s3Request.getSecretKey()
-            );
-            S3Client s3 = S3Client.builder()
-                .region(Region.EU_CENTRAL_1) // Change to your region if needed
-                .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
-                .build();
-
-            ListObjectsV2Request listReq = ListObjectsV2Request.builder()
-                .bucket(s3Request.getBucket())
-                .prefix(s3Request.getPath() != null ? s3Request.getPath() : "")
-                .delimiter("/")
-                .build();
-
-            ListObjectsV2Response listRes = s3.listObjectsV2(listReq);
-
-            List<String> fileNames = listRes.contents().stream()
-                .map(S3Object::key)
-                .filter(key -> !key.equals(s3Request.getPath())) // Exclude the folder itself
-                .collect(Collectors.toList());
-            List<String> folders = listRes.commonPrefixes().stream()
-                .map(CommonPrefix::prefix)
-                .collect(Collectors.toList());
-
-            // New: For each folder, count the number of files recursively (all files under the prefix)
-            Map<String, Integer> folderFileCounts = new HashMap<>();
-            for (String folderPrefix : folders) {
-                int count = 0;
-                String continuationToken = null;
-                do {
-                    ListObjectsV2Request.Builder folderReqBuilder = ListObjectsV2Request.builder()
-                        .bucket(s3Request.getBucket())
-                        .prefix(folderPrefix);
-                    if (continuationToken != null) {
-                        folderReqBuilder.continuationToken(continuationToken);
-                    }
-                    ListObjectsV2Request folderReq = folderReqBuilder.build();
-                    ListObjectsV2Response folderRes = s3.listObjectsV2(folderReq);
-                    // Exclude the folder itself from the count
-                    count += folderRes.contents().stream()
-                        .map(S3Object::key)
-                        .filter(key -> !key.equals(folderPrefix))
-                        .count();
-                    continuationToken = folderRes.nextContinuationToken();
-                } while (continuationToken != null);
-                folderFileCounts.put(folderPrefix, count);
-            }
-
-            // New: Count all files recursively under the current path
-            int recursiveFileCount = 0;
-            String continuationToken = null;
-            do {
-                ListObjectsV2Request.Builder reqBuilder = ListObjectsV2Request.builder()
-                    .bucket(s3Request.getBucket())
-                    .prefix(s3Request.getPath() != null ? s3Request.getPath() : "");
-                if (continuationToken != null) {
-                    reqBuilder.continuationToken(continuationToken);
-                }
-                ListObjectsV2Request req = reqBuilder.build();
-                ListObjectsV2Response res = s3.listObjectsV2(req);
-                recursiveFileCount += res.contents().stream()
-                    .map(S3Object::key)
-                    .filter(key -> !(s3Request.getPath() != null && key.equals(s3Request.getPath())))
-                    .count();
-                continuationToken = res.nextContinuationToken();
-            } while (continuationToken != null);
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("files", fileNames);
-            result.put("folders", folders);
-            result.put("folderFileCounts", folderFileCounts); // New field
-            result.put("recursiveFileCount", recursiveFileCount); // New field
+            Map<String, Object> result = s3Service.listS3Contents(s3Request);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             Map<String, Object> error = new HashMap<>();
@@ -159,34 +81,7 @@ public class FileController {
     @PostMapping("/list-s3-files-in-folder")
     public ResponseEntity<Map<String, Object>> listS3FilesInFolder(@RequestBody S3Request s3Request) {
         try {
-            AwsBasicCredentials awsCreds = AwsBasicCredentials.create(
-                s3Request.getAccessKey(), s3Request.getSecretKey()
-            );
-            S3Client s3 = S3Client.builder()
-                .region(Region.EU_CENTRAL_1)
-                .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
-                .build();
-
-            List<String> allFiles = new java.util.ArrayList<>();
-            String continuationToken = null;
-            do {
-                ListObjectsV2Request.Builder reqBuilder = ListObjectsV2Request.builder()
-                    .bucket(s3Request.getBucket())
-                    .prefix(s3Request.getPath() != null ? s3Request.getPath() : "");
-                if (continuationToken != null) {
-                    reqBuilder.continuationToken(continuationToken);
-                }
-                ListObjectsV2Request req = reqBuilder.build();
-                ListObjectsV2Response res = s3.listObjectsV2(req);
-                for (S3Object obj : res.contents()) {
-                    // Exclude the folder itself
-                    if (!(s3Request.getPath() != null && obj.key().equals(s3Request.getPath()))) {
-                        allFiles.add(obj.key());
-                    }
-                }
-                continuationToken = res.nextContinuationToken();
-            } while (continuationToken != null);
-
+            List<String> allFiles = s3Service.getAllFilesInFolder(s3Request);
             Map<String, Object> result = new HashMap<>();
             result.put("files", allFiles);
             return ResponseEntity.ok(result);
@@ -198,11 +93,30 @@ public class FileController {
     }
 
     @PostMapping("/load-s3")
-    public ResponseEntity<String> loadS3Files(@RequestBody S3Request s3Request) {
+    public ResponseEntity<Map<String, Object>> loadS3Files(@RequestBody S3Request s3Request) {
         Logger logger = LoggerFactory.getLogger(FileController.class);
         logger.info("Received S3 files to load: {}", s3Request.getFiles());
-        // Here you can process the files as needed
-        return ResponseEntity.ok("S3 files received for processing.");
+        
+        try {
+            Map<String, Object> result = s3Service.loadS3FilesForDataLoom(s3Request);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Error loading S3 files: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+
+    @PostMapping("/s3-metadata")
+    public ResponseEntity<Map<String, Object>> getS3FileMetadata(@RequestBody S3Request s3Request) {
+        try {
+            Map<String, Object> metadata = s3Service.getS3FileMetadata(s3Request);
+            return ResponseEntity.ok(metadata);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Error getting file metadata: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
     }
 
     @DeleteMapping("/delete/{filename}")

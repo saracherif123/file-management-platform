@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Box, Paper, Stack, Typography, Select, MenuItem, FormControl, InputLabel, TextField, Button, Snackbar, Alert, List, ListItem, ListItemText, Checkbox, ListItemButton } from '@mui/material';
-import { FaFolder, FaFileCsv, FaFileAlt, FaFileCode, FaFile } from 'react-icons/fa';
+import { Box, Paper, Stack, Typography, Select, MenuItem, FormControl, InputLabel, TextField, Button, Snackbar, Alert, List, ListItem, ListItemText, Checkbox, ListItemButton, IconButton, InputAdornment, CircularProgress } from '@mui/material';
+import { FaFolder, FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaEye, FaEyeSlash } from 'react-icons/fa';
 import FileManager from './FileManager';
 
 function parseS3Path(s3Path) {
@@ -24,15 +24,18 @@ function getFileIcon(filename) {
 
 export default function ImportWizard() {
   const [source, setSource] = useState('Local');
-  const [s3Options, setS3Options] = useState({ accessKey: '', secretKey: '', s3path: '' });
+  const [s3Options, setS3Options] = useState({ accessKey: '', secretKey: '', s3path: '', region: 'eu-central-1' });
+  const [showSecretKey, setShowSecretKey] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [s3Files, setS3Files] = useState([]);
   const [s3Folders, setS3Folders] = useState([]);
   const [folderFileCounts, setFolderFileCounts] = useState({});
   const [recursiveFileCount, setRecursiveFileCount] = useState(null);
+  const [fileSizes, setFileSizes] = useState({});
   const [selectedS3Files, setSelectedS3Files] = useState([]);
   const [s3Loading, setS3Loading] = useState(false);
   const [folderLoading, setFolderLoading] = useState({}); // { [folder]: boolean }
+  const [loadingToDataLoom, setLoadingToDataLoom] = useState(false);
 
   const handleSourceChange = (e) => {
     setSource(e.target.value);
@@ -47,7 +50,7 @@ export default function ImportWizard() {
     setS3Loading(true);
     setS3Files([]);
     setS3Folders([]);
-    setSelectedS3Files([]);
+    // Don't clear selectedS3Files here to maintain selection across navigation
     const { bucket, prefix } = parseS3Path(s3Options.s3path);
     if (!bucket) {
       setSnackbar({ open: true, message: 'Please enter a valid S3 path (e.g. s3://bucket/prefix/ or bucket/prefix/)', severity: 'warning' });
@@ -63,6 +66,7 @@ export default function ImportWizard() {
           secretKey: s3Options.secretKey,
           bucket,
           path: customPrefix !== undefined ? customPrefix : prefix,
+          region: s3Options.region,
         }),
       });
       const data = await res.json();
@@ -72,11 +76,13 @@ export default function ImportWizard() {
         setS3Folders([]);
         setFolderFileCounts({});
         setRecursiveFileCount(null);
+        setFileSizes({});
       } else {
         setS3Files(data.files || []);
         setS3Folders(data.folders || []);
         setFolderFileCounts(data.folderFileCounts || {});
         setRecursiveFileCount(data.recursiveFileCount ?? null);
+        setFileSizes(data.fileSizes || {});
         setSnackbar({ open: true, message: `Connected. Found ${data.files.length} files and ${data.folders.length} folders.`, severity: 'success' });
       }
     } catch (err) {
@@ -85,6 +91,7 @@ export default function ImportWizard() {
       setS3Folders([]);
       setFolderFileCounts({});
       setRecursiveFileCount(null);
+      setFileSizes({});
     } finally {
       setS3Loading(false);
     }
@@ -116,34 +123,6 @@ export default function ImportWizard() {
     );
   };
 
-  const handleLoad = async () => {
-    if (source === 'S3') {
-      if (selectedS3Files.length === 0) {
-        setSnackbar({ open: true, message: 'Please select at least one S3 file to load.', severity: 'warning' });
-        return;
-      }
-      const { bucket, prefix } = parseS3Path(s3Options.s3path);
-      try {
-        const res = await fetch('http://localhost:8080/rest/load-s3', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            accessKey: s3Options.accessKey,
-            secretKey: s3Options.secretKey,
-            bucket,
-            path: prefix,
-            files: selectedS3Files,
-          }),
-        });
-        if (!res.ok) throw new Error('Failed to load selected S3 files');
-        setSnackbar({ open: true, message: 'Selected S3 files sent to backend for processing.', severity: 'success' });
-      } catch (err) {
-        setSnackbar({ open: true, message: err.message, severity: 'error' });
-      }
-    }
-    // For Local, FileManager handles loading
-  };
-
   // Helper: fetch all files under a folder (recursively)
   const fetchAllFilesInFolder = async (folderPrefix) => {
     const { bucket } = parseS3Path(s3Options.s3path);
@@ -155,6 +134,7 @@ export default function ImportWizard() {
         secretKey: s3Options.secretKey,
         bucket,
         path: folderPrefix,
+        region: s3Options.region,
       }),
     });
     const data = await res.json();
@@ -186,18 +166,9 @@ export default function ImportWizard() {
   const getFolderCheckboxState = (folder) => {
     const count = folderFileCounts[folder];
     if (!count || count === 0) return { checked: false, indeterminate: false };
-    // We need to know all files in the folder to check selection state
-    // For performance, if count > 1000, just show unchecked unless all files are selected
-    // (or you can fetch on click)
-    // For now, we will not show indeterminate for >1000
-    // But for small folders, we can check
-    // We'll use a best-effort: if all files in selectedS3Files, checked; if some, indeterminate
-    const filesInFolder = Object.keys(folderFileCounts).length && folderFileCounts[folder] <= 1000 ? null : null; // Not used for now
-    // We'll just use checked if any file in selectedS3Files starts with folder
     const selectedInFolder = selectedS3Files.filter(f => f.startsWith(folder));
     if (selectedInFolder.length === 0) return { checked: false, indeterminate: false };
     if (folderFileCounts[folder] > 1000) {
-      // For large folders, just show checked if any selected
       return { checked: true, indeterminate: false };
     }
     if (selectedInFolder.length === folderFileCounts[folder]) return { checked: true, indeterminate: false };
@@ -210,6 +181,62 @@ export default function ImportWizard() {
     if (count > 1000) return '>1000';
     return count;
   }
+
+  // Helper to format file size
+  function formatFileSize(bytes) {
+    if (bytes === null || bytes === undefined) return '';
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  const handleLoadToDataLoom = async () => {
+    if (selectedS3Files.length === 0) {
+      setSnackbar({ open: true, message: 'Please select at least one S3 file to load.', severity: 'warning' });
+      return;
+    }
+    
+    setLoadingToDataLoom(true);
+    const { bucket, prefix } = parseS3Path(s3Options.s3path);
+    
+    try {
+      const res = await fetch('http://localhost:8080/rest/load-s3', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accessKey: s3Options.accessKey,
+          secretKey: s3Options.secretKey,
+          bucket,
+          path: prefix,
+          region: s3Options.region,
+          files: selectedS3Files,
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (data.error) {
+        setSnackbar({ open: true, message: data.error, severity: 'error' });
+      } else {
+        const successMsg = `Successfully loaded ${data.totalProcessed} files.`;
+        const failedMsg = data.totalFailed > 0 ? ` ${data.totalFailed} files failed to load.` : '';
+        setSnackbar({ 
+          open: true, 
+          message: successMsg + failedMsg, 
+          severity: data.totalFailed > 0 ? 'warning' : 'success' 
+        });
+        
+        // Clear selection after successful load
+        setSelectedS3Files([]);
+      }
+    } catch (err) {
+      setSnackbar({ open: true, message: 'Failed to load files: ' + err.message, severity: 'error' });
+    } finally {
+      setLoadingToDataLoom(false);
+    }
+  };
 
   return (
     <Box sx={{ maxWidth: 800, mx: 'auto', mt: 4 }}>
@@ -229,33 +256,75 @@ export default function ImportWizard() {
             </Select>
           </FormControl>
           {source === 'S3' && (
-            <Stack direction="row" spacing={2} alignItems="center">
-              <TextField
-                label="Access Key"
-                name="accessKey"
-                value={s3Options.accessKey}
-                onChange={handleS3Change}
-                size="small"
-              />
-              <TextField
-                label="Secret Key"
-                name="secretKey"
-                value={s3Options.secretKey}
-                onChange={handleS3Change}
-                size="small"
-                type="password"
-              />
-              <TextField
-                label="S3 Path (e.g. s3://bucket/prefix/)"
-                name="s3path"
-                value={s3Options.s3path}
-                onChange={handleS3Change}
-                size="small"
-                sx={{ minWidth: 300 }}
-              />
-              <Button variant="outlined" onClick={handleConnectS3} disabled={s3Loading}>
-                {s3Loading ? 'Connecting...' : 'Connect'}
-              </Button>
+            <Stack spacing={2} sx={{ flex: 1 }}>
+              {/* First row: Access Key and Secret Key */}
+              <Stack direction="row" spacing={2} alignItems="center">
+                <TextField
+                  label="Access Key"
+                  name="accessKey"
+                  value={s3Options.accessKey}
+                  onChange={handleS3Change}
+                  size="small"
+                  sx={{ flex: 1, minWidth: 200 }}
+                />
+                <TextField
+                  label="Secret Key"
+                  name="secretKey"
+                  value={s3Options.secretKey}
+                  onChange={handleS3Change}
+                  size="small"
+                  type={showSecretKey ? 'text' : 'password'}
+                  sx={{ flex: 1, minWidth: 200 }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={() => setShowSecretKey(!showSecretKey)}
+                          edge="end"
+                        >
+                          {showSecretKey ? <FaEyeSlash /> : <FaEye />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Stack>
+              {/* Second row: Region and S3 Path */}
+              <Stack direction="row" spacing={2} alignItems="center">
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel id="region-label">Region</InputLabel>
+                  <Select
+                    labelId="region-label"
+                    name="region"
+                    value={s3Options.region}
+                    label="Region"
+                    onChange={handleS3Change}
+                  >
+                    <MenuItem value="us-east-1">US East (N. Virginia)</MenuItem>
+                    <MenuItem value="us-west-2">US West (Oregon)</MenuItem>
+                    <MenuItem value="eu-west-1">Europe (Ireland)</MenuItem>
+                    <MenuItem value="eu-central-1">Europe (Frankfurt)</MenuItem>
+                    <MenuItem value="ap-southeast-1">Asia Pacific (Singapore)</MenuItem>
+                    <MenuItem value="ap-northeast-1">Asia Pacific (Tokyo)</MenuItem>
+                  </Select>
+                </FormControl>
+                <TextField
+                  label="S3 Path (e.g. s3://bucket/prefix/)"
+                  name="s3path"
+                  value={s3Options.s3path}
+                  onChange={handleS3Change}
+                  size="small"
+                  sx={{ flex: 1, minWidth: 300 }}
+                />
+                <Button 
+                  variant="outlined" 
+                  onClick={handleConnectS3} 
+                  disabled={s3Loading}
+                  sx={{ minWidth: 100 }}
+                >
+                  {s3Loading ? 'Connecting...' : 'Connect'}
+                </Button>
+              </Stack>
             </Stack>
           )}
         </Stack>
@@ -264,7 +333,7 @@ export default function ImportWizard() {
           <Box sx={{ my: 3 }}>
             <Typography variant="h6">S3 Folders & Files</Typography>
             {/* Show counts for current path and selected files */}
-            <Box sx={{ display: 'flex', gap: 3, mb: 1 }}>
+            <Box sx={{ display: 'flex', gap: 3, mb: 1, alignItems: 'center' }}>
               <Typography variant="body2" color="text.secondary">
                 Files in this path: <b>{formatCount(recursiveFileCount !== null ? recursiveFileCount : s3Files.length)}</b>
               </Typography>
@@ -274,6 +343,16 @@ export default function ImportWizard() {
               <Typography variant="body2" color="text.secondary">
                 Imported (selected): <b>{formatCount(selectedS3Files.length)}</b>
               </Typography>
+              {selectedS3Files.length > 0 && (
+                <Button 
+                  size="small" 
+                  variant="outlined" 
+                  onClick={() => setSelectedS3Files([])}
+                  sx={{ ml: 'auto' }}
+                >
+                  Clear Selection
+                </Button>
+              )}
             </Box>
             {parseS3Path(s3Options.s3path).prefix && (
               <Button size="small" onClick={handleBack} sx={{ mb: 1 }}>
@@ -316,15 +395,37 @@ export default function ImportWizard() {
                     onChange={() => handleToggleS3File(file)}
                   />
                 }>
-                  <ListItemText primary={<span>{getFileIcon(file)}{file}</span>} />
+                  <ListItemText 
+                    primary={
+                      <span>
+                        {getFileIcon(file)}{file}
+                        {fileSizes[file] && (
+                          <span style={{ color: '#888', fontSize: '0.9em', marginLeft: 8 }}>
+                            ({formatFileSize(fileSizes[file])})
+                          </span>
+                        )}
+                      </span>
+                    } 
+                  />
                 </ListItem>
               ))}
             </List>
+            {/* Load to DataLoom button */}
+            {selectedS3Files.length > 0 && (
+              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                <Button 
+                  variant="contained" 
+                  color="primary"
+                  onClick={handleLoadToDataLoom}
+                  disabled={loadingToDataLoom}
+                  startIcon={loadingToDataLoom ? <CircularProgress size={20} /> : null}
+                >
+                  {loadingToDataLoom ? 'Loading...' : `Load ${selectedS3Files.length} file${selectedS3Files.length > 1 ? 's' : ''}`}
+                </Button>
+              </Box>
+            )}
           </Box>
         )}
-        <Stack direction="row" justifyContent="flex-end" mt={2}>
-          <Button variant="contained" onClick={handleLoad} disabled={source === 'S3' && s3Files.length === 0}>Load</Button>
-        </Stack>
         <Snackbar
           open={snackbar.open}
           autoHideDuration={4000}

@@ -126,7 +126,7 @@ export default function FileManager() {
     try {
       const res = await apiDeleteFile(filename);
       if (!res.ok) throw new Error('Delete failed');
-      setSnackbar({ open: true, message: 'File deleted.', severity: 'success' });
+      setSnackbar({ open: true, message: 'File removed from staging area.', severity: 'success' });
       fetchFiles();
     } catch (err) {
       setSnackbar({ open: true, message: err.message, severity: 'error' });
@@ -157,7 +157,10 @@ export default function FileManager() {
     e.preventDefault();
     setIsDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleUpload(e.dataTransfer.files[0]);
+      // Handle multiple files
+      Array.from(e.dataTransfer.files).forEach(file => {
+        handleUpload(file);
+      });
     }
   };
   const onDragOver = (e) => {
@@ -217,7 +220,7 @@ export default function FileManager() {
             />
           </Box>
           <Button variant="contained" component="label" disabled={uploading}>
-            Search Files
+            Upload
             <input
               type="file"
               hidden
