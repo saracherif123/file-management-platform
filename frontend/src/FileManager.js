@@ -1,11 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Box,
   Button,
   Typography,
-  List,
-  ListItem,
-  ListItemText,
   IconButton,
   LinearProgress,
   Paper,
@@ -24,8 +21,10 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import SearchIcon from '@mui/icons-material/Search';
 import { styled } from '@mui/material/styles';
-import * as api from './api';
 import { FaFileCsv, FaFileAlt, FaFileCode, FaFile } from 'react-icons/fa';
+import { SimpleTreeView, TreeItem } from '@mui/x-tree-view';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const FILE_TYPES = ['All', 'csv', 'json', 'txt', 'parquet'];
@@ -60,18 +59,6 @@ export default function FileManager() {
   const [fileType, setFileType] = useState('All');
   const fileInputRef = useRef();
 
-  const fetchFiles = () => {
-    setLoading(true);
-    apiListFiles()
-      .then(setFiles)
-      .catch(() => setSnackbar({ open: true, message: 'Failed to fetch file list.', severity: 'error' }))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    fetchFiles();
-  }, []);
-
   // --- API WRAPPERS using api.js ---
   function apiListFiles() {
     return fetch('http://localhost:8080/rest/list')
@@ -83,7 +70,7 @@ export default function FileManager() {
 
   function apiUploadFile(file) {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', file, file.webkitRelativePath || file.name);
     return fetch('http://localhost:8080/rest/upload', {
       method: 'POST',
       body: formData,
@@ -99,9 +86,52 @@ export default function FileManager() {
   function apiDownloadFile(filename) {
     return fetch(`http://localhost:8080/rest/download/${encodeURIComponent(filename)}`);
   }
-
   // --- END API WRAPPERS ---
 
+  // useCallback for stable references
+  const fetchFiles = useCallback(() => {
+    setLoading(true);
+    apiListFiles()
+      .then(setFiles)
+      .catch(() => setSnackbar({ open: true, message: 'Failed to fetch file list.', severity: 'error' }))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetchFiles();
+  }, [fetchFiles]);
+
+  const handleDelete = useCallback(async (filename) => {
+    try {
+      const res = await apiDeleteFile(filename);
+      if (!res.ok) throw new Error('Delete failed');
+      setSnackbar({ open: true, message: 'File removed from staging area.', severity: 'success' });
+      fetchFiles();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
+    }
+  }, [fetchFiles]);
+
+  const handleDownload = useCallback((filename) => {
+    apiDownloadFile(filename)
+      .then(res => {
+        if (!res.ok) throw new Error('Download failed');
+        return res.blob();
+      })
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      })
+      .catch(() => setSnackbar({ open: true, message: 'Download failed.', severity: 'error' }));
+  }, []);
+
+  // --- Upload logic supporting folders ---
   const handleUpload = async (file) => {
     if (!file) return;
     if (file.size > MAX_FILE_SIZE) {
@@ -122,45 +152,19 @@ export default function FileManager() {
     }
   };
 
-  const handleDelete = async (filename) => {
-    try {
-      const res = await apiDeleteFile(filename);
-      if (!res.ok) throw new Error('Delete failed');
-      setSnackbar({ open: true, message: 'File removed from staging area.', severity: 'success' });
-      fetchFiles();
-    } catch (err) {
-      setSnackbar({ open: true, message: err.message, severity: 'error' });
+  // Handle multiple files (for folder upload)
+  const handleUploadMultiple = async (fileList) => {
+    for (const file of fileList) {
+      await handleUpload(file);
     }
   };
 
-  const handleDownload = (filename) => {
-    apiDownloadFile(filename)
-      .then(res => {
-        if (!res.ok) throw new Error('Download failed');
-        return res.blob();
-      })
-      .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      })
-      .catch(() => setSnackbar({ open: true, message: 'Download failed.', severity: 'error' }));
-  };
-
-  // Drag and drop handlers
+  // Drag and drop handlers (support folders)
   const onDrop = (e) => {
     e.preventDefault();
     setIsDragOver(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      // Handle multiple files
-      Array.from(e.dataTransfer.files).forEach(file => {
-        handleUpload(file);
-      });
+      handleUploadMultiple(Array.from(e.dataTransfer.files));
     }
   };
   const onDragOver = (e) => {
@@ -181,12 +185,87 @@ export default function FileManager() {
     );
   };
 
+  // Helper: Build a tree from file paths (prefer webkitRelativePath if available)
+  function buildFileTree(files) {
+    const root = {};
+    for (const file of files) {
+      // If file is a File object with webkitRelativePath, use it; else, use string
+      const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
+      const parts = path.split('/');
+      let current = root;
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (!current[part]) {
+          current[part] = i === parts.length - 1 ? { __file: path } : {};
+        }
+        current = current[part];
+      }
+    }
+    return root;
+  }
+
+  // Helper: Recursively render the tree
+  function renderTree(node, path = '') {
+    return Object.entries(node).map(([key, value], idx) => {
+      const id = path ? `${path}/${key}` : key;
+      if (value.__file) {
+        // File node
+        return (
+          <TreeItem key={id} itemId={id} label={
+            <span>
+              <Checkbox
+                checked={value.selected}
+                onChange={() => value.onToggle(value.__file)}
+                size="small"
+                sx={{ p: 0, mr: 1 }}
+              />
+              {getFileIcon(key)}{key}
+              <IconButton edge="end" aria-label="download" size="small" onClick={e => { e.stopPropagation(); value.onDownload(value.__file); }}>
+                <DownloadIcon fontSize="small" />
+              </IconButton>
+              <IconButton edge="end" aria-label="delete" size="small" onClick={e => { e.stopPropagation(); value.onDelete(value.__file); }}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </span>
+          } />
+        );
+      } else {
+        // Folder node
+        return (
+          <TreeItem key={id} itemId={id} label={key}>
+            {renderTree(value, id)}
+          </TreeItem>
+        );
+      }
+    });
+  }
+
   // File type filter
   const filteredFiles = files.filter(f => {
     const matchesType = fileType === 'All' || f.endsWith('.' + fileType);
     const matchesSearch = f.toLowerCase().includes(search.toLowerCase());
     return matchesType && matchesSearch;
   });
+
+  // Build tree data for SimpleTreeView
+  const treeData = React.useMemo(() => {
+    // Attach selection and handlers to each file node
+    const tree = buildFileTree(filteredFiles);
+    function attachHandlers(node) {
+      for (const key in node) {
+        if (node[key].__file) {
+          node[key].selected = selectedFiles.includes(node[key].__file);
+          node[key].onToggle = handleToggle;
+          node[key].onDownload = handleDownload;
+          node[key].onDelete = handleDelete;
+        } else {
+          attachHandlers(node[key]);
+        }
+      }
+    }
+    attachHandlers(tree);
+    return tree;
+  }, [filteredFiles, selectedFiles, handleDelete, handleDownload]);
 
   // Load button action (example: alert selected files)
   const handleLoad = () => {
@@ -224,7 +303,9 @@ export default function FileManager() {
             <input
               type="file"
               hidden
-              onChange={e => handleUpload(e.target.files[0])}
+              multiple
+              webkitdirectory="true"
+              onChange={e => handleUploadMultiple(Array.from(e.target.files))}
               ref={fileInputRef}
             />
           </Button>
@@ -240,30 +321,15 @@ export default function FileManager() {
         </DragDropArea>
         {loading ? <LinearProgress /> : null}
         <Typography variant="h6" mt={2}>Files</Typography>
-        <List>
-          {filteredFiles.length === 0 && <ListItem><ListItemText primary="No files found." /></ListItem>}
-          {filteredFiles.map(filename => (
-            <ListItem
-              key={filename}
-              secondaryAction={
-                <>
-                  <IconButton edge="end" aria-label="download" onClick={() => handleDownload(filename)}>
-                    <DownloadIcon />
-                  </IconButton>
-                  <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(filename)}>
-                    <DeleteIcon />
-                  </IconButton>
-                </>
-              }
-            >
-              <Checkbox
-                checked={selectedFiles.includes(filename)}
-                onChange={() => handleToggle(filename)}
-              />
-              <ListItemText primary={<span>{getFileIcon(filename)}{filename}</span>} />
-            </ListItem>
-          ))}
-        </List>
+        {/* Tree View for files */}
+        <SimpleTreeView
+          aria-label="file tree"
+          defaultCollapseIcon={<ExpandMoreIcon />}
+          defaultExpandIcon={<ChevronRightIcon />}
+          sx={{ height: 400, flexGrow: 1, maxWidth: 600, overflowY: 'auto', mb: 2 }}
+        >
+          {renderTree(treeData)}
+        </SimpleTreeView>
         <Stack direction="row" spacing={2} mt={2} justifyContent="flex-end">
           <Button variant="contained" onClick={handleLoad} disabled={selectedFiles.length === 0}>
             Load

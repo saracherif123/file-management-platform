@@ -29,6 +29,8 @@ public class FileService {
             throw new IOException("Invalid file path");
         }
         Path targetLocation = this.fileStorageLocation.resolve(fileName);
+        // Ensure parent directories exist
+        Files.createDirectories(targetLocation.getParent());
         file.transferTo(targetLocation);
         return fileName;
     }
@@ -44,10 +46,10 @@ public class FileService {
     }
 
     public List<String> listFiles() throws IOException {
-        try (Stream<Path> stream = Files.list(this.fileStorageLocation)) {
+        try (Stream<Path> stream = Files.walk(this.fileStorageLocation)) {
             return stream
                     .filter(Files::isRegularFile)
-                    .map(path -> path.getFileName().toString())
+                    .map(path -> this.fileStorageLocation.relativize(path).toString().replace("\\", "/"))
                     .collect(Collectors.toList());
         }
     }
