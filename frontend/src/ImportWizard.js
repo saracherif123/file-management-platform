@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Box, Paper, Stack, Typography, Select, MenuItem, FormControl, InputLabel, TextField, Button, Snackbar, Alert, List, ListItem, ListItemText, Checkbox, ListItemButton, IconButton, InputAdornment, CircularProgress } from '@mui/material';
 import { FaFolder, FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaEye, FaEyeSlash } from 'react-icons/fa';
 import FileManager from './FileManager';
+import { SimpleTreeView, TreeItem } from '@mui/x-tree-view';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 function parseS3Path(s3Path) {
   let path = s3Path.trim();
@@ -36,6 +39,8 @@ export default function ImportWizard() {
   const [s3Loading, setS3Loading] = useState(false);
   const [folderLoading, setFolderLoading] = useState({}); // { [folder]: boolean }
   const [loadingToDataLoom, setLoadingToDataLoom] = useState(false);
+  const [s3TreeData, setS3TreeData] = useState({});
+  const [s3TreeLoading, setS3TreeLoading] = useState(false);
 
   const handleSourceChange = (e) => {
     setSource(e.target.value);
@@ -97,8 +102,95 @@ export default function ImportWizard() {
     }
   };
 
+  // Helper: Build a tree from file paths
+  function buildFileTree(files) {
+    const root = {};
+    for (const file of files) {
+      const parts = file.split('/');
+      let current = root;
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (!current[part]) {
+          current[part] = i === parts.length - 1 ? { __file: file } : {};
+        }
+        current = current[part];
+      }
+    }
+    return root;
+  }
+
+  // Helper: Recursively render the tree
+  function renderTree(node, path = '') {
+    return Object.entries(node).map(([key, value], idx) => {
+      const id = path ? `${path}/${key}` : key;
+      if (value.__file) {
+        // File node
+        return (
+          <TreeItem key={id} itemId={id} label={
+            <span>
+              <Checkbox
+                checked={selectedS3Files.includes(value.__file)}
+                onChange={() => handleToggleS3File(value.__file)}
+                size="small"
+                sx={{ p: 0, mr: 1 }}
+              />
+              {getFileIcon(key)}{key}
+            </span>
+          } />
+        );
+      } else {
+        // Folder node
+        return (
+          <TreeItem key={id} itemId={id} label={key}>
+            {renderTree(value, id)}
+          </TreeItem>
+        );
+      }
+    });
+  }
+
+  // Fetch all S3 files recursively and build tree
+  const fetchS3Tree = async () => {
+    setS3TreeLoading(true);
+    setS3TreeData({});
+    setSelectedS3Files([]);
+    const { bucket, prefix } = parseS3Path(s3Options.s3path);
+    if (!bucket) {
+      setSnackbar({ open: true, message: 'Please enter a valid S3 path (e.g. s3://bucket/prefix/ or bucket/prefix/)', severity: 'warning' });
+      setS3TreeLoading(false);
+      return;
+    }
+    try {
+      const res = await fetch('http://localhost:8080/rest/list-s3-all-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accessKey: s3Options.accessKey,
+          secretKey: s3Options.secretKey,
+          bucket,
+          path: prefix,
+          region: s3Options.region,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setSnackbar({ open: true, message: data.error, severity: 'error' });
+        setS3TreeData({});
+      } else {
+        setS3TreeData(buildFileTree(data.files || []));
+        setSnackbar({ open: true, message: `Connected. Found ${data.files.length} files.`, severity: 'success' });
+      }
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message, severity: 'error' });
+      setS3TreeData({});
+    } finally {
+      setS3TreeLoading(false);
+    }
+  };
+
+  // Replace handleConnectS3 to use tree fetch
   const handleConnectS3 = () => {
-    fetchS3Contents();
+    fetchS3Tree();
   };
 
   const handleNavigateFolder = (folder) => {
@@ -329,88 +421,24 @@ export default function ImportWizard() {
           )}
         </Stack>
         {source === 'Local' && <FileManager />}
-        {source === 'S3' && (s3Files.length > 0 || s3Folders.length > 0) && (
+        {source === 'S3' && (
           <Box sx={{ my: 3 }}>
-            <Typography variant="h6">S3 Folders & Files</Typography>
-            {/* Show counts for current path and selected files */}
-            <Box sx={{ display: 'flex', gap: 3, mb: 1, alignItems: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                Files in this path: <b>{formatCount(recursiveFileCount !== null ? recursiveFileCount : s3Files.length)}</b>
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Folders in this path: <b>{formatCount(s3Folders.length)}</b>
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Imported (selected): <b>{formatCount(selectedS3Files.length)}</b>
-              </Typography>
-              {selectedS3Files.length > 0 && (
-                <Button 
-                  size="small" 
-                  variant="outlined" 
-                  onClick={() => setSelectedS3Files([])}
-                  sx={{ ml: 'auto' }}
-                >
-                  Clear Selection
-                </Button>
-              )}
-            </Box>
-            {parseS3Path(s3Options.s3path).prefix && (
-              <Button size="small" onClick={handleBack} sx={{ mb: 1 }}>
-                Back
-              </Button>
+            <Typography variant="h6">Files</Typography>
+            {s3TreeLoading ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, my: 2 }}>
+                <CircularProgress size={24} />
+                <Typography>Loading S3 file tree...</Typography>
+              </Box>
+            ) : (
+              <SimpleTreeView
+                aria-label="s3 file tree"
+                defaultCollapseIcon={<ExpandMoreIcon />}
+                defaultExpandIcon={<ChevronRightIcon />}
+                sx={{ height: 400, flexGrow: 1, maxWidth: 600, overflowY: 'auto', mb: 2 }}
+              >
+                {renderTree(s3TreeData)}
+              </SimpleTreeView>
             )}
-            <List>
-              {s3Folders.map((folder, idx) => {
-                const { checked, indeterminate } = getFolderCheckboxState(folder);
-                return (
-                  <ListItemButton key={folder} onClick={() => handleNavigateFolder(folder)}>
-                    <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
-                    <Checkbox
-                      edge="start"
-                      checked={checked}
-                      indeterminate={indeterminate}
-                      disabled={folderLoading[folder]}
-                      onClick={e => { e.stopPropagation(); handleToggleS3Folder(folder); }}
-                      sx={{ mr: 1 }}
-                    />
-                    <ListItemText
-                      primary={
-                        <span>
-                          {folder}
-                          <span style={{ color: '#888', fontSize: '0.9em', marginLeft: 8 }}>
-                            (files: {formatCount(folderFileCounts[folder])})
-                          </span>
-                        </span>
-                      }
-                      primaryTypographyProps={{ fontWeight: 'bold' }}
-                    />
-                  </ListItemButton>
-                );
-              })}
-              {s3Files.map((file, idx) => (
-                <ListItem key={file} disablePadding secondaryAction={
-                  <Checkbox
-                    edge="end"
-                    checked={selectedS3Files.includes(file)}
-                    onChange={() => handleToggleS3File(file)}
-                  />
-                }>
-                  <ListItemText 
-                    primary={
-                      <span>
-                        {getFileIcon(file)}{file}
-                        {fileSizes[file] && (
-                          <span style={{ color: '#888', fontSize: '0.9em', marginLeft: 8 }}>
-                            ({formatFileSize(fileSizes[file])})
-                          </span>
-                        )}
-                      </span>
-                    } 
-                  />
-                </ListItem>
-              ))}
-            </List>
-            {/* Load to DataLoom button */}
             {selectedS3Files.length > 0 && (
               <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
                 <Button 

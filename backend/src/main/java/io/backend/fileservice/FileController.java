@@ -119,6 +119,20 @@ public class FileController {
         }
     }
 
+    @PostMapping("/list-s3-all-files")
+    public ResponseEntity<Map<String, Object>> listS3AllFiles(@RequestBody S3Request s3Request) {
+        try {
+            List<String> allFiles = s3Service.getAllFilesInFolder(s3Request);
+            Map<String, Object> result = new HashMap<>();
+            result.put("files", allFiles);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Error: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+
     @DeleteMapping("/delete/{filename}")
     public ResponseEntity<String> deleteFile(@PathVariable String filename) {
         try {
