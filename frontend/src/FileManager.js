@@ -185,6 +185,21 @@ export default function FileManager() {
     );
   };
 
+  // Folder selection handler
+  const handleToggleFolder = (node, path = '') => {
+    const allFiles = collectAllFiles(node, path);
+    const allSelected = allFiles.every(f => selectedFiles.includes(f));
+    setSelectedFiles(prev => {
+      if (allSelected) {
+        // Deselect all
+        return prev.filter(f => !allFiles.includes(f));
+      } else {
+        // Select all (add any not already selected)
+        return Array.from(new Set([...prev, ...allFiles]));
+      }
+    });
+  };
+
   // Helper: Build a tree from file paths (prefer webkitRelativePath if available)
   function buildFileTree(files) {
     const root = {};
@@ -202,6 +217,29 @@ export default function FileManager() {
       }
     }
     return root;
+  }
+
+  // Helper: Recursively collect all file paths under a node
+  function collectAllFiles(node, path = '') {
+    let files = [];
+    for (const [key, value] of Object.entries(node)) {
+      const currentPath = path ? `${path}/${key}` : key;
+      if (value.__file) {
+        files.push(value.__file);
+      } else {
+        files = files.concat(collectAllFiles(value, currentPath));
+      }
+    }
+    return files;
+  }
+
+  // Helper: Calculate folder checkbox state
+  function getFolderCheckboxState(node, selectedFiles, path = '') {
+    const allFiles = collectAllFiles(node, path);
+    const selectedCount = allFiles.filter(f => selectedFiles.includes(f)).length;
+    if (selectedCount === 0) return { checked: false, indeterminate: false };
+    if (selectedCount === allFiles.length) return { checked: true, indeterminate: false };
+    return { checked: false, indeterminate: true };
   }
 
   // Helper: Recursively render the tree
@@ -231,8 +269,20 @@ export default function FileManager() {
         );
       } else {
         // Folder node
+        const { checked, indeterminate } = getFolderCheckboxState(value, selectedFiles, id);
         return (
-          <TreeItem key={id} itemId={id} label={key}>
+          <TreeItem key={id} itemId={id} label={
+            <span>
+              <Checkbox
+                checked={checked}
+                indeterminate={indeterminate}
+                onChange={() => handleToggleFolder(value, id)}
+                size="small"
+                sx={{ p: 0, mr: 1 }}
+              />
+              {key}
+            </span>
+          }>
             {renderTree(value, id)}
           </TreeItem>
         );

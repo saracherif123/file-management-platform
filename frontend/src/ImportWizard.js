@@ -119,6 +119,44 @@ export default function ImportWizard() {
     return root;
   }
 
+  // Helper: Recursively collect all S3 file paths under a node
+  function collectAllS3Files(node, path = '') {
+    let files = [];
+    for (const [key, value] of Object.entries(node)) {
+      const currentPath = path ? `${path}/${key}` : key;
+      if (value.__file) {
+        files.push(value.__file);
+      } else {
+        files = files.concat(collectAllS3Files(value, currentPath));
+      }
+    }
+    return files;
+  }
+
+  // Helper: Calculate folder checkbox state for S3
+  function getS3FolderCheckboxState(node, selectedS3Files, path = '') {
+    const allFiles = collectAllS3Files(node, path);
+    const selectedCount = allFiles.filter(f => selectedS3Files.includes(f)).length;
+    if (selectedCount === 0) return { checked: false, indeterminate: false };
+    if (selectedCount === allFiles.length) return { checked: true, indeterminate: false };
+    return { checked: false, indeterminate: true };
+  }
+
+  // Folder selection handler for S3
+  const handleToggleS3FolderTree = (node, path = '') => {
+    const allFiles = collectAllS3Files(node, path);
+    const allSelected = allFiles.every(f => selectedS3Files.includes(f));
+    setSelectedS3Files(prev => {
+      if (allSelected) {
+        // Deselect all
+        return prev.filter(f => !allFiles.includes(f));
+      } else {
+        // Select all (add any not already selected)
+        return Array.from(new Set([...prev, ...allFiles]));
+      }
+    });
+  };
+
   // Helper: Recursively render the tree
   function renderTree(node, path = '') {
     return Object.entries(node).map(([key, value], idx) => {
@@ -140,8 +178,20 @@ export default function ImportWizard() {
         );
       } else {
         // Folder node
+        const { checked, indeterminate } = getS3FolderCheckboxState(value, selectedS3Files, id);
         return (
-          <TreeItem key={id} itemId={id} label={key}>
+          <TreeItem key={id} itemId={id} label={
+            <span>
+              <Checkbox
+                checked={checked}
+                indeterminate={indeterminate}
+                onChange={() => handleToggleS3FolderTree(value, id)}
+                size="small"
+                sx={{ p: 0, mr: 1 }}
+              />
+              {key}
+            </span>
+          }>
             {renderTree(value, id)}
           </TreeItem>
         );
@@ -289,10 +339,13 @@ export default function ImportWizard() {
       setSnackbar({ open: true, message: 'Please select at least one S3 file to load.', severity: 'warning' });
       return;
     }
-    
-    setLoadingToDataLoom(true);
     const { bucket, prefix } = parseS3Path(s3Options.s3path);
-    
+    if (!bucket) {
+      setSnackbar({ open: true, message: 'S3 bucket is missing. Please enter a valid S3 path (e.g. s3://bucket/).', severity: 'error' });
+      return;
+    }
+    setLoadingToDataLoom(true);
+    console.log('Importing S3 files:', { bucket, prefix, files: selectedS3Files });
     try {
       const res = await fetch('http://localhost:8080/rest/load-s3', {
         method: 'POST',
@@ -306,21 +359,19 @@ export default function ImportWizard() {
           files: selectedS3Files,
         }),
       });
-      
       const data = await res.json();
-      
       if (data.error) {
         setSnackbar({ open: true, message: data.error, severity: 'error' });
       } else {
         const successMsg = `Successfully loaded ${data.totalProcessed} files.`;
-        const failedMsg = data.totalFailed > 0 ? ` ${data.totalFailed} files failed to load.` : '';
+        const failedMsg = data.failedFiles && data.failedFiles.length > 0
+          ? `\nFailed:\n${data.failedFiles.join('\n')}`
+          : '';
         setSnackbar({ 
           open: true, 
           message: successMsg + failedMsg, 
           severity: data.totalFailed > 0 ? 'warning' : 'success' 
         });
-        
-        // Clear selection after successful load
         setSelectedS3Files([]);
       }
     } catch (err) {
