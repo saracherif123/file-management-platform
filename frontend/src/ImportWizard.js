@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Paper, Stack, Typography, Select, MenuItem, FormControl, InputLabel, TextField, Button, Snackbar, Alert, List, ListItem, ListItemText, Checkbox, ListItemButton, IconButton, InputAdornment, CircularProgress } from '@mui/material';
+import { Box, Paper, Stack, Typography, Select, MenuItem, FormControl, InputLabel, TextField, Button, Snackbar, Alert, List, ListItem, ListItemText, Checkbox, ListItemButton, IconButton, InputAdornment, CircularProgress, LinearProgress } from '@mui/material';
 import { FaFolder, FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaEye, FaEyeSlash } from 'react-icons/fa';
 import FileManager from './FileManager';
 import { SimpleTreeView, TreeItem } from '@mui/x-tree-view';
@@ -41,6 +41,7 @@ export default function ImportWizard() {
   const [loadingToDataLoom, setLoadingToDataLoom] = useState(false);
   const [s3TreeData, setS3TreeData] = useState({});
   const [s3TreeLoading, setS3TreeLoading] = useState(false);
+  const [s3ImportProgress, setS3ImportProgress] = useState({ jobId: null, progress: 0, isImporting: false, message: '' });
 
   const handleSourceChange = (e) => {
     setSource(e.target.value);
@@ -334,20 +335,25 @@ export default function ImportWizard() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
-  const handleLoadToDataLoom = async () => {
+  // S3 import with progress tracking
+  const handleLoadToDataLoomWithProgress = async () => {
     if (selectedS3Files.length === 0) {
       setSnackbar({ open: true, message: 'Please select at least one S3 file to load.', severity: 'warning' });
       return;
     }
+    
     const { bucket, prefix } = parseS3Path(s3Options.s3path);
     if (!bucket) {
       setSnackbar({ open: true, message: 'S3 bucket is missing. Please enter a valid S3 path (e.g. s3://bucket/).', severity: 'error' });
       return;
     }
-    setLoadingToDataLoom(true);
+    
+    const jobId = crypto.randomUUID();
+    setS3ImportProgress({ jobId, progress: 0, isImporting: true, message: 'Starting S3 import...' });
     console.log('Importing S3 files:', { bucket, prefix, files: selectedS3Files });
+    
     try {
-      const res = await fetch('http://localhost:8080/rest/load-s3', {
+      const res = await fetch('http://localhost:8080/rest/load-s3-progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -357,27 +363,52 @@ export default function ImportWizard() {
           path: prefix,
           region: s3Options.region,
           files: selectedS3Files,
+          jobId: jobId,
         }),
       });
+      
+      if (!res.ok) throw new Error('Import failed');
+      
       const data = await res.json();
-      if (data.error) {
-        setSnackbar({ open: true, message: data.error, severity: 'error' });
-      } else {
-        const successMsg = `Successfully loaded ${data.totalProcessed} files.`;
-        const failedMsg = data.failedFiles && data.failedFiles.length > 0
-          ? `\nFailed:\n${data.failedFiles.join('\n')}`
-          : '';
-        setSnackbar({ 
-          open: true, 
-          message: successMsg + failedMsg, 
-          severity: data.totalFailed > 0 ? 'warning' : 'success' 
-        });
-        setSelectedS3Files([]);
-      }
+      const actualJobId = data.jobId || jobId;
+      
+      // Poll for progress
+      const pollProgress = async () => {
+        try {
+          const progressRes = await fetch(`http://localhost:8080/rest/import-progress/${actualJobId}`);
+          if (progressRes.ok) {
+            const progressData = await progressRes.json();
+            const progressPercent = progressData.total > 0 ? (progressData.processed / progressData.total) * 100 : 0;
+            setS3ImportProgress(prev => ({ 
+              ...prev, 
+              progress: progressPercent, 
+              message: progressData.message || `Processing... ${progressData.processed}/${progressData.total}`
+            }));
+            
+            if (progressData.status === 'done' || progressData.status === 'error') {
+              setS3ImportProgress({ jobId: null, progress: 0, isImporting: false, message: '' });
+              if (progressData.status === 'done') {
+                setSnackbar({ open: true, message: progressData.message || 'S3 import completed!', severity: 'success' });
+                setSelectedS3Files([]);
+              } else {
+                setSnackbar({ open: true, message: progressData.message || 'S3 import failed with errors.', severity: 'error' });
+              }
+              return;
+            }
+          }
+        } catch (err) {
+          console.error('Progress polling error:', err);
+        }
+        
+        // Continue polling
+        setTimeout(pollProgress, 1000);
+      };
+      
+      pollProgress();
+      
     } catch (err) {
+      setS3ImportProgress({ jobId: null, progress: 0, isImporting: false, message: '' });
       setSnackbar({ open: true, message: 'Failed to load files: ' + err.message, severity: 'error' });
-    } finally {
-      setLoadingToDataLoom(false);
     }
   };
 
@@ -475,6 +506,19 @@ export default function ImportWizard() {
         {source === 'S3' && (
           <Box sx={{ my: 3 }}>
             <Typography variant="h6">Files</Typography>
+            {/* Progress bar for S3 import */}
+            {s3ImportProgress.isImporting && (
+              <Box sx={{ mb: 2 }}>
+                <LinearProgress 
+                  variant="determinate" 
+                  value={s3ImportProgress.progress} 
+                  sx={{ height: 8, borderRadius: 4 }}
+                />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  {s3ImportProgress.message} ({Math.round(s3ImportProgress.progress)}%)
+                </Typography>
+              </Box>
+            )}
             {s3TreeLoading ? (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, my: 2 }}>
                 <CircularProgress size={24} />
@@ -495,11 +539,11 @@ export default function ImportWizard() {
                 <Button 
                   variant="contained" 
                   color="primary"
-                  onClick={handleLoadToDataLoom}
-                  disabled={loadingToDataLoom}
-                  startIcon={loadingToDataLoom ? <CircularProgress size={20} /> : null}
+                  onClick={handleLoadToDataLoomWithProgress}
+                  disabled={s3ImportProgress.isImporting}
+                  startIcon={s3ImportProgress.isImporting ? <CircularProgress size={20} /> : null}
                 >
-                  {loadingToDataLoom ? 'Loading...' : `Load ${selectedS3Files.length} file${selectedS3Files.length > 1 ? 's' : ''}`}
+                  {s3ImportProgress.isImporting ? 'Importing...' : `Load ${selectedS3Files.length} file${selectedS3Files.length > 1 ? 's' : ''}`}
                 </Button>
               </Box>
             )}

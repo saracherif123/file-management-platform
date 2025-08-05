@@ -57,6 +57,7 @@ export default function FileManager() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [fileType, setFileType] = useState('All');
+  const [importProgress, setImportProgress] = useState({ jobId: null, progress: 0, isImporting: false, message: '' });
   const fileInputRef = useRef();
 
   // --- API WRAPPERS using api.js ---
@@ -322,6 +323,82 @@ export default function FileManager() {
     setSnackbar({ open: true, message: `Loaded: ${selectedFiles.join(', ')}`, severity: 'info' });
   };
 
+  // Import with progress tracking
+  const handleImportWithProgress = async () => {
+    console.log('handleImportWithProgress called with files:', selectedFiles);
+    if (selectedFiles.length === 0) {
+      setSnackbar({ open: true, message: 'Please select at least one file to import.', severity: 'warning' });
+      return;
+    }
+    
+    const jobId = crypto.randomUUID();
+    console.log('Generated jobId:', jobId);
+    setImportProgress({ jobId, progress: 0, isImporting: true, message: 'Starting import...' });
+    
+    try {
+      // Start import
+      console.log('Sending import request to backend...');
+      const res = await fetch('http://localhost:8080/rest/load-local-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: selectedFiles,
+          jobId: jobId
+        }),
+      });
+      
+      console.log('Backend response status:', res.status);
+      if (!res.ok) throw new Error('Import failed');
+      
+      const data = await res.json();
+      console.log('Backend response data:', data);
+      const actualJobId = data.jobId || jobId;
+      
+      // Poll for progress
+      const pollProgress = async () => {
+        try {
+          console.log('Polling progress for jobId:', actualJobId);
+          const progressRes = await fetch(`http://localhost:8080/rest/import-progress/${actualJobId}`);
+          console.log('Progress response status:', progressRes.status);
+          if (progressRes.ok) {
+            const progressData = await progressRes.json();
+            console.log('Progress data:', progressData);
+            const progressPercent = progressData.total > 0 ? (progressData.processed / progressData.total) * 100 : 0;
+            setImportProgress(prev => ({ 
+              ...prev, 
+              progress: progressPercent, 
+              message: progressData.message || `Processing... ${progressData.processed}/${progressData.total}`
+            }));
+            
+            if (progressData.status === 'done' || progressData.status === 'error') {
+              console.log('Import finished with status:', progressData.status);
+              setImportProgress({ jobId: null, progress: 0, isImporting: false, message: '' });
+              if (progressData.status === 'done') {
+                setSnackbar({ open: true, message: progressData.message || 'Import completed!', severity: 'success' });
+                setSelectedFiles([]);
+              } else {
+                setSnackbar({ open: true, message: progressData.message || 'Import failed with errors.', severity: 'error' });
+              }
+              return;
+            }
+          }
+        } catch (err) {
+          console.error('Progress polling error:', err);
+        }
+        
+        // Continue polling
+        setTimeout(pollProgress, 1000);
+      };
+      
+      pollProgress();
+      
+    } catch (err) {
+      console.error('Import error:', err);
+      setImportProgress({ jobId: null, progress: 0, isImporting: false, message: '' });
+      setSnackbar({ open: true, message: 'Import failed: ' + err.message, severity: 'error' });
+    }
+  };
+
   return (
     <Box sx={{ maxWidth: 700, mx: 'auto', mt: 4 }}>
       <Paper sx={{ p: 3 }}>
@@ -371,6 +448,19 @@ export default function FileManager() {
         </DragDropArea>
         {loading ? <LinearProgress /> : null}
         <Typography variant="h6" mt={2}>Files</Typography>
+        {/* Progress bar for import */}
+        {importProgress.isImporting && (
+          <Box sx={{ mb: 2 }}>
+            <LinearProgress 
+              variant="determinate" 
+              value={importProgress.progress} 
+              sx={{ height: 8, borderRadius: 4 }}
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              {importProgress.message} ({Math.round(importProgress.progress)}%)
+            </Typography>
+          </Box>
+        )}
         {/* Tree View for files */}
         <SimpleTreeView
           aria-label="file tree"
@@ -381,8 +471,12 @@ export default function FileManager() {
           {renderTree(treeData)}
         </SimpleTreeView>
         <Stack direction="row" spacing={2} mt={2} justifyContent="flex-end">
-          <Button variant="contained" onClick={handleLoad} disabled={selectedFiles.length === 0}>
-            Load
+          <Button 
+            variant="contained" 
+            onClick={handleImportWithProgress} 
+            disabled={selectedFiles.length === 0 || importProgress.isImporting}
+          >
+            {importProgress.isImporting ? 'Importing...' : 'Import'}
           </Button>
         </Stack>
         <Snackbar
