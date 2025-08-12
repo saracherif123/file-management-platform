@@ -158,12 +158,13 @@ public class S3Service {
         // Sanitize filename to remove any invalid characters
         fileName = fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
         
-        String localFilePath = "uploads/" + System.currentTimeMillis() + "_" + fileName;
+        // Preserve folder structure and original filename
+        String localFilePath = "uploads/" + fileKey;
         
-        // Ensure uploads directory exists
-        java.io.File uploadsDir = new java.io.File("uploads");
-        if (!uploadsDir.exists()) {
-            uploadsDir.mkdirs();
+        // Ensure uploads directory and all parent directories exist
+        java.io.File localFile = new java.io.File(localFilePath);
+        if (!localFile.getParentFile().exists()) {
+            localFile.getParentFile().mkdirs();
         }
         
         // Download the file

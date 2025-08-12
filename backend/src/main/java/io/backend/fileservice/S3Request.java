@@ -11,4 +11,5 @@ public class S3Request {
     private String path;
     private List<String> files;
     private String region;
+    private String jobId;
 } 

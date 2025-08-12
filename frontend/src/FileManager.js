@@ -4,49 +4,19 @@ import {
   Button,
   Typography,
   IconButton,
-  LinearProgress,
   Paper,
   Stack,
   Snackbar,
   Alert,
-  InputBase,
-  CircularProgress,
-  Checkbox,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel
+  LinearProgress
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
-import SearchIcon from '@mui/icons-material/Search';
-import { styled } from '@mui/material/styles';
-import { FaFileCsv, FaFileAlt, FaFileCode, FaFile } from 'react-icons/fa';
-import { SimpleTreeView, TreeItem } from '@mui/x-tree-view';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import FileTree, { buildFileTree, collectAllFiles } from './components/FileTree';
+import LocalInput from './components/LocalInput';
+import ProgressBar from './components/ProgressBar';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const FILE_TYPES = ['All', 'csv', 'json', 'txt', 'parquet'];
-
-const DragDropArea = styled(Box)(({ theme, isdragover }) => ({
-  border: '2px dashed',
-  borderColor: isdragover ? theme.palette.primary.main : theme.palette.divider,
-  borderRadius: theme.shape.borderRadius,
-  padding: theme.spacing(2),
-  textAlign: 'center',
-  background: isdragover ? theme.palette.action.hover : 'inherit',
-  cursor: 'pointer',
-  marginBottom: theme.spacing(2),
-}));
-
-function getFileIcon(filename) {
-  if (filename.endsWith('.csv')) return <FaFileCsv color="#2a9d8f" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.json')) return <FaFileCode color="#e76f51" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.parquet')) return <FaFileAlt color="#264653" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.txt')) return <FaFileAlt color="#6d6875" style={{ marginRight: 8 }} />;
-  return <FaFile style={{ marginRight: 8 }} />;
-}
 
 export default function FileManager() {
   const [files, setFiles] = useState([]);
@@ -93,8 +63,13 @@ export default function FileManager() {
   const fetchFiles = useCallback(() => {
     setLoading(true);
     apiListFiles()
-      .then(setFiles)
-      .catch(() => setSnackbar({ open: true, message: 'Failed to fetch file list.', severity: 'error' }))
+      .then(files => {
+        setFiles(files);
+      })
+      .catch(err => {
+        console.error('Failed to fetch files:', err);
+        setSnackbar({ open: true, message: 'Failed to fetch file list.', severity: 'error' });
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -140,12 +115,16 @@ export default function FileManager() {
       return;
     }
     setUploading(true);
+    console.log('Uploading file:', file.name, 'size:', file.size);
     try {
       const res = await apiUploadFile(file);
       if (!res.ok) throw new Error('Upload failed');
+      console.log('Upload successful, response:', res);
       setSnackbar({ open: true, message: 'File uploaded successfully!', severity: 'success' });
+      console.log('Refreshing file list...');
       await fetchFiles(); // Ensure the file list is refreshed after upload
     } catch (err) {
+      console.error('Upload failed:', err);
       setSnackbar({ open: true, message: err.message, severity: 'error' });
     } finally {
       setUploading(false);
@@ -201,106 +180,26 @@ export default function FileManager() {
     });
   };
 
-  // Helper: Build a tree from file paths (prefer webkitRelativePath if available)
-  function buildFileTree(files) {
-    const root = {};
-    for (const file of files) {
-      // If file is a File object with webkitRelativePath, use it; else, use string
-      const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
-      const parts = path.split('/');
-      let current = root;
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        if (!current[part]) {
-          current[part] = i === parts.length - 1 ? { __file: path } : {};
-        }
-        current = current[part];
-      }
-    }
-    return root;
-  }
 
-  // Helper: Recursively collect all file paths under a node
-  function collectAllFiles(node, path = '') {
-    let files = [];
-    for (const [key, value] of Object.entries(node)) {
-      const currentPath = path ? `${path}/${key}` : key;
-      if (value.__file) {
-        files.push(value.__file);
-      } else {
-        files = files.concat(collectAllFiles(value, currentPath));
-      }
-    }
-    return files;
-  }
 
-  // Helper: Calculate folder checkbox state
-  function getFolderCheckboxState(node, selectedFiles, path = '') {
-    const allFiles = collectAllFiles(node, path);
-    const selectedCount = allFiles.filter(f => selectedFiles.includes(f)).length;
-    if (selectedCount === 0) return { checked: false, indeterminate: false };
-    if (selectedCount === allFiles.length) return { checked: true, indeterminate: false };
-    return { checked: false, indeterminate: true };
-  }
 
-  // Helper: Recursively render the tree
-  function renderTree(node, path = '') {
-    return Object.entries(node).map(([key, value], idx) => {
-      const id = path ? `${path}/${key}` : key;
-      if (value.__file) {
-        // File node
-        return (
-          <TreeItem key={id} itemId={id} label={
-            <span>
-              <Checkbox
-                checked={value.selected}
-                onChange={() => value.onToggle(value.__file)}
-                size="small"
-                sx={{ p: 0, mr: 1 }}
-              />
-              {getFileIcon(key)}{key}
-              <IconButton edge="end" aria-label="download" size="small" onClick={e => { e.stopPropagation(); value.onDownload(value.__file); }}>
-                <DownloadIcon fontSize="small" />
-              </IconButton>
-              <IconButton edge="end" aria-label="delete" size="small" onClick={e => { e.stopPropagation(); value.onDelete(value.__file); }}>
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </span>
-          } />
-        );
-      } else {
-        // Folder node
-        const { checked, indeterminate } = getFolderCheckboxState(value, selectedFiles, id);
-        return (
-          <TreeItem key={id} itemId={id} label={
-            <span>
-              <Checkbox
-                checked={checked}
-                indeterminate={indeterminate}
-                onChange={() => handleToggleFolder(value, id)}
-                size="small"
-                sx={{ p: 0, mr: 1 }}
-              />
-              {key}
-            </span>
-          }>
-            {renderTree(value, id)}
-          </TreeItem>
-        );
-      }
-    });
-  }
 
   // File type filter
-  const filteredFiles = files.filter(f => {
-    const matchesType = fileType === 'All' || f.endsWith('.' + fileType);
-    const matchesSearch = f.toLowerCase().includes(search.toLowerCase());
-    return matchesType && matchesSearch;
-  });
+  const filteredFiles = React.useMemo(() => {
+    const filtered = (files || []).filter(f => {
+      const matchesType = fileType === 'All' || f.endsWith('.' + fileType);
+      const matchesSearch = f.toLowerCase().includes(search.toLowerCase());
+      return matchesType && matchesSearch;
+    });
+    return filtered;
+  }, [files, fileType, search]);
 
   // Build tree data for SimpleTreeView
   const treeData = React.useMemo(() => {
     // Attach selection and handlers to each file node
+    if (!filteredFiles || filteredFiles.length === 0) {
+      return {};
+    }
     const tree = buildFileTree(filteredFiles);
     function attachHandlers(node) {
       for (const key in node) {
@@ -316,28 +215,22 @@ export default function FileManager() {
     }
     attachHandlers(tree);
     return tree;
-  }, [filteredFiles, selectedFiles, handleDelete, handleDownload]);
+  }, [filteredFiles, selectedFiles, handleToggle, handleDelete, handleDownload]);
 
-  // Load button action (example: alert selected files)
-  const handleLoad = () => {
-    setSnackbar({ open: true, message: `Loaded: ${selectedFiles.join(', ')}`, severity: 'info' });
-  };
+
 
   // Import with progress tracking
   const handleImportWithProgress = async () => {
-    console.log('handleImportWithProgress called with files:', selectedFiles);
     if (selectedFiles.length === 0) {
       setSnackbar({ open: true, message: 'Please select at least one file to import.', severity: 'warning' });
       return;
     }
     
     const jobId = crypto.randomUUID();
-    console.log('Generated jobId:', jobId);
     setImportProgress({ jobId, progress: 0, isImporting: true, message: 'Starting import...' });
     
     try {
       // Start import
-      console.log('Sending import request to backend...');
       const res = await fetch('http://localhost:8080/rest/load-local-progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -347,22 +240,17 @@ export default function FileManager() {
         }),
       });
       
-      console.log('Backend response status:', res.status);
       if (!res.ok) throw new Error('Import failed');
       
       const data = await res.json();
-      console.log('Backend response data:', data);
       const actualJobId = data.jobId || jobId;
       
       // Poll for progress
       const pollProgress = async () => {
         try {
-          console.log('Polling progress for jobId:', actualJobId);
           const progressRes = await fetch(`http://localhost:8080/rest/import-progress/${actualJobId}`);
-          console.log('Progress response status:', progressRes.status);
           if (progressRes.ok) {
             const progressData = await progressRes.json();
-            console.log('Progress data:', progressData);
             const progressPercent = progressData.total > 0 ? (progressData.processed / progressData.total) * 100 : 0;
             setImportProgress(prev => ({ 
               ...prev, 
@@ -371,7 +259,6 @@ export default function FileManager() {
             }));
             
             if (progressData.status === 'done' || progressData.status === 'error') {
-              console.log('Import finished with status:', progressData.status);
               setImportProgress({ jobId: null, progress: 0, isImporting: false, message: '' });
               if (progressData.status === 'done') {
                 setSnackbar({ open: true, message: progressData.message || 'Import completed!', severity: 'success' });
@@ -402,74 +289,50 @@ export default function FileManager() {
   return (
     <Box sx={{ maxWidth: 700, mx: 'auto', mt: 4 }}>
       <Paper sx={{ p: 3 }}>
-        <Stack direction="row" spacing={2} alignItems="center" mb={2}>
-          <FormControl size="small" sx={{ minWidth: 100 }}>
-            <InputLabel id="file-type-label">Type</InputLabel>
-            <Select
-              labelId="file-type-label"
-              value={fileType}
-              label="Type"
-              onChange={e => setFileType(e.target.value)}
-            >
-              {FILE_TYPES.map(type => (
-                <MenuItem key={type} value={type}>{type.toUpperCase()}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Box sx={{ flex: 1 }}>
-            <InputBase
-              placeholder="Search files..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              startAdornment={<SearchIcon sx={{ mr: 1 }} />}
-              sx={{ width: '100%', border: 1, borderColor: 'divider', borderRadius: 1, px: 1, py: 0.5 }}
-            />
-          </Box>
-          <Button variant="contained" component="label" disabled={uploading}>
-            Upload
-            <input
-              type="file"
-              hidden
-              multiple
-              webkitdirectory="true"
-              onChange={e => handleUploadMultiple(Array.from(e.target.files))}
-              ref={fileInputRef}
-            />
-          </Button>
-          {uploading && <CircularProgress size={24} />}
-        </Stack>
-        <DragDropArea
-          isdragover={isDragOver ? 1 : 0}
-          onDrop={onDrop}
+        <LocalInput
+          fileType={fileType}
+          onFileTypeChange={e => setFileType(e.target.value)}
+          search={search}
+          onSearchChange={e => setSearch(e.target.value)}
+          onUpload={handleUpload}
+          onUploadMultiple={handleUploadMultiple}
+          uploading={uploading}
+          isDragOver={isDragOver}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
-        >
-          Drag and drop a file here
-        </DragDropArea>
+          onDrop={onDrop}
+        />
         {loading ? <LinearProgress /> : null}
         <Typography variant="h6" mt={2}>Files</Typography>
+        
+
+        
         {/* Progress bar for import */}
-        {importProgress.isImporting && (
-          <Box sx={{ mb: 2 }}>
-            <LinearProgress 
-              variant="determinate" 
-              value={importProgress.progress} 
-              sx={{ height: 8, borderRadius: 4 }}
-            />
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              {importProgress.message} ({Math.round(importProgress.progress)}%)
-            </Typography>
-          </Box>
-        )}
+        <ProgressBar
+          isImporting={importProgress.isImporting}
+          progress={importProgress.progress}
+          message={importProgress.message}
+        />
         {/* Tree View for files */}
-        <SimpleTreeView
-          aria-label="file tree"
-          defaultCollapseIcon={<ExpandMoreIcon />}
-          defaultExpandIcon={<ChevronRightIcon />}
-          sx={{ height: 400, flexGrow: 1, maxWidth: 600, overflowY: 'auto', mb: 2 }}
-        >
-          {renderTree(treeData)}
-        </SimpleTreeView>
+        <FileTree
+          files={treeData}
+          selectedFiles={selectedFiles}
+          onFileToggle={handleToggle}
+          onFolderToggle={handleToggleFolder}
+          isTreeData={true}
+          renderFileActions={(filename) => (
+            <>
+              <IconButton edge="end" aria-label="download" size="small" onClick={e => { e.stopPropagation(); handleDownload(filename); }}>
+                <DownloadIcon fontSize="small" />
+              </IconButton>
+              <IconButton edge="end" aria-label="delete" size="small" onClick={e => { e.stopPropagation(); handleDelete(filename); }}>
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </>
+          )}
+          height={400}
+          maxWidth={600}
+        />
         <Stack direction="row" spacing={2} mt={2} justifyContent="flex-end">
           <Button 
             variant="contained" 
