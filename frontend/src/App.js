@@ -1,8 +1,8 @@
 import React from 'react';
-import ImportWizard from './ImportWizard';
+import StepWizard from './components/StepWizard';
 
 function App() {
-  return <ImportWizard />;
+  return <StepWizard />;
 }
 
 export default App;

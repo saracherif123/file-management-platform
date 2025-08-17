@@ -13,12 +13,19 @@ import {
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
 export default function S3Input({ 
-  s3Options, 
-  onS3Change, 
+  config, 
+  onConfigChange, 
   onConnect, 
   loading = false 
 }) {
   const [showSecretKey, setShowSecretKey] = useState(false);
+
+  const handleChange = (field) => (event) => {
+    onConfigChange({
+      ...config,
+      [field]: event.target.value
+    });
+  };
 
   return (
     <Stack spacing={2} sx={{ flex: 1 }}>
@@ -26,18 +33,16 @@ export default function S3Input({
       <Stack direction="row" spacing={2} alignItems="center">
         <TextField
           label="Access Key"
-          name="accessKey"
-          value={s3Options.accessKey}
-          onChange={onS3Change}
+          value={config.accessKey}
+          onChange={handleChange('accessKey')}
           size="small"
           autoComplete="off"
           sx={{ flex: 1, minWidth: 200 }}
         />
         <TextField
           label="Secret Key"
-          name="secretKey"
-          value={s3Options.secretKey}
-          onChange={onS3Change}
+          value={config.secretKey}
+          onChange={handleChange('secretKey')}
           size="small"
           type={showSecretKey ? 'text' : 'password'}
           sx={{ flex: 1, minWidth: 200 }}
@@ -61,10 +66,9 @@ export default function S3Input({
           <InputLabel id="region-label">Region</InputLabel>
           <Select
             labelId="region-label"
-            name="region"
-            value={s3Options.region}
+            value={config.region}
             label="Region"
-            onChange={onS3Change}
+            onChange={handleChange('region')}
           >
             <MenuItem value="us-east-1">US East (N. Virginia)</MenuItem>
             <MenuItem value="us-west-2">US West (Oregon)</MenuItem>
@@ -75,17 +79,18 @@ export default function S3Input({
           </Select>
         </FormControl>
         <TextField
-          label="S3 Path (e.g. s3://bucket/prefix/)"
-          name="s3path"
-          value={s3Options.s3path}
-          onChange={onS3Change}
+          label="S3 Path"
+          value={config.s3Path}
+          onChange={handleChange('s3Path')}
           size="small"
+          placeholder="s3://bucket/prefix/"
           sx={{ flex: 1, minWidth: 300 }}
+          helperText="Full S3 path (e.g., s3://alex-datasets-2/)"
         />
         <Button 
-          variant="outlined" 
+          variant="contained" 
           onClick={onConnect} 
-          disabled={loading}
+          disabled={loading || !config.accessKey || !config.secretKey || !config.s3Path}
           sx={{ minWidth: 100 }}
         >
           {loading ? 'Connecting...' : 'Connect'}
