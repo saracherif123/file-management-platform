@@ -563,6 +563,7 @@ export default function StepWizard() {
                     <option value="csv">CSV</option>
                     <option value="json">JSON</option>
                     <option value="parquet">Parquet</option>
+                    <option value="pdf">PDF</option>
                     <option value="txt">Text</option>
                   </select>
                   

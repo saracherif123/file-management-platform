@@ -3,13 +3,14 @@ import { SimpleTreeView, TreeItem } from '@mui/x-tree-view';
 import { Checkbox, Box } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaFolder } from 'react-icons/fa';
+import { FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaFolder, FaFilePdf } from 'react-icons/fa';
 
 // Helper function to get file icon
 function getFileIcon(filename) {
   if (filename.endsWith('.csv')) return <FaFileCsv color="#2a9d8f" style={{ marginRight: 8 }} />;
   if (filename.endsWith('.json')) return <FaFileCode color="#e76f51" style={{ marginRight: 8 }} />;
   if (filename.endsWith('.parquet')) return <FaFileAlt color="#264653" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.pdf')) return <FaFilePdf color="#e74c3c" style={{ marginRight: 8 }} />;
   if (filename.endsWith('.txt')) return <FaFileAlt color="#6d6875" style={{ marginRight: 8 }} />;
   return <FaFile style={{ marginRight: 8 }} />;
 }
@@ -223,7 +224,7 @@ export default function FileTree({
                 sx={{ p: 0, mr: 1 }}
               />
               <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
-              {key} ({Object.keys(value).length} items)
+              {key}
             </span>
           }>
             {childElements}

@@ -25,7 +25,7 @@ const DragDropArea = styled(Box)(({ theme, isdragover }) => ({
   marginBottom: theme.spacing(2),
 }));
 
-const FILE_TYPES = ['All', 'csv', 'json', 'txt', 'parquet'];
+const FILE_TYPES = ['All', 'csv', 'json', 'txt', 'parquet', 'pdf'];
 
 export default function LocalInput({ 
   fileType,
