@@ -540,16 +540,6 @@ export default function StepWizard() {
               
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 {dataSource === 's3' ? 'S3' : 'Local'} Files: {getCurrentFiles().length} available
-                {dataSource === 'local' && (
-                  <>
-                    <br />
-                    <small>Filtered: {filteredFiles.length} files</small>
-                    <br />
-                    <small>Tree data keys: {Object.keys(treeData).join(', ')}</small>
-                    <br />
-                    <small>Tree data type: {typeof treeData}</small>
-                  </>
-                )}
               </Typography>
               
               <Box sx={{ mb: 2 }}>
@@ -607,17 +597,6 @@ export default function StepWizard() {
                       ? 'No S3 files found. Please check your connection and path.'
                       : 'No local files uploaded. Please upload files to continue.'
                     }
-                    <br />
-                    <small>Debug: treeData keys: {Object.keys(treeData).join(', ')}</small>
-                    <br />
-                    <small>Debug: treeData type: {typeof treeData}</small>
-                    <small>Debug: treeData length: {Object.keys(treeData).length}</small>
-                    <br />
-                    <small>Debug: filteredFiles: {filteredFiles ? filteredFiles.length : 'null'} files</small>
-                    <br />
-                    <small>Debug: getCurrentFiles: {getCurrentFiles().length} files</small>
-                    <br />
-                    <small>Debug: dataSource: {dataSource}</small>
                   </Typography>
                 </Box>
               ) : (
