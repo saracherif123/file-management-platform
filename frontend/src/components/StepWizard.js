@@ -105,7 +105,8 @@ export default function StepWizard() {
       
       console.log('Sending S3 request:', requestBody);
       
-      const response = await fetch('http://localhost:8080/rest/list-s3', {
+      // Get all files recursively to match local file behavior
+      const response = await fetch('http://localhost:8080/rest/list-s3-all-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
@@ -123,42 +124,28 @@ export default function StepWizard() {
         throw new Error(result.error);
       }
       
-      // Extract files and folders from the response
+      // Extract all files recursively (no separate folders needed)
       const files = result.files || [];
-      const folders = result.folders || [];
       
-      console.log('S3 files:', files);
-      console.log('S3 folders:', folders);
+      console.log('S3 recursive files:', files);
+      console.log('S3 files count:', files.length);
+      console.log('S3 files sample paths:', files.slice(0, 5));
       
-      // Create a complete S3 tree structure by fetching contents of each folder
-      console.log('Creating complete S3 tree structure with all folder contents');
+      // Process S3 files exactly like local files - create same object structure
+      console.log('Creating S3 file objects to match local files');
       
-      const s3TreeData = {};
+      const s3FileList = files.map(file => ({
+        name: file.split('/').pop(), // Just the filename
+        webkitRelativePath: file,    // Full path (exactly like local files)
+        type: 'file',
+        size: 0
+      }));
       
-      // First, add root-level files
-      files.forEach(file => {
-        const fileName = file.split('/').pop(); // Get just the filename
-        s3TreeData[fileName] = { __file: file };
-        console.log('Added root file:', fileName);
-      });
+      console.log('S3 file list created:', s3FileList.length, 'files');
+      console.log('Sample S3 paths:', s3FileList.slice(0, 5).map(f => f.webkitRelativePath));
       
-      // Then, create folder placeholders (don't fetch contents yet)
-      for (const folder of folders) {
-        const folderName = folder.replace('/', ''); // Remove trailing slash
-        console.log('Creating folder placeholder:', folderName);
-        
-        s3TreeData[folderName] = {
-          __folder: true,
-          __path: folder,
-          __hasContent: true, // Assume it has content, will be verified on expansion
-          __expanded: false
-        };
-      }
-      
-      console.log('Complete S3 tree structure created:', s3TreeData);
-      
-      // Set the complete tree data
-      setS3Files(s3TreeData);
+      // Set the S3 files as a flat array (like local files)
+      setS3Files(s3FileList);
       
       setActiveStep(STEPS.FILE_SELECTION);
     } catch (error) {
@@ -264,8 +251,9 @@ export default function StepWizard() {
         if (key.startsWith('__')) continue; // Skip metadata properties
         
         if (value && value.__file) {
-          // This is a file
-          files.push(value.__file);
+          // This is a file - extract the file path
+          const filePath = value.__file;
+          files.push(filePath);
         } else if (value && typeof value === 'object' && !value.__file) {
           // This is a subfolder, recursively get its files
           const subPath = folderPath ? `${folderPath}/${key}` : key;
@@ -298,132 +286,7 @@ export default function StepWizard() {
     }
   };
 
-  // Handle folder expansion (lazy loading)
-  const handleFolderExpand = async (folderName, folderId, folderNode) => {
-    console.log('Expanding folder:', folderName, 'with ID:', folderId, 'node:', folderNode);
-    
-    try {
-      // Parse the S3 path to get bucket and current path
-      const s3Path = s3Config.s3Path;
-      const pathWithoutPrefix = s3Path.substring(5); // Remove 's3://'
-      const slashIndex = pathWithoutPrefix.indexOf('/');
-      
-      let bucket, basePath;
-      if (slashIndex === -1) {
-        bucket = pathWithoutPrefix;
-        basePath = '';
-      } else {
-        bucket = pathWithoutPrefix.substring(0, slashIndex);
-        basePath = pathWithoutPrefix.substring(slashIndex + 1);
-      }
-      
-      // Get the full path to this folder from the folderNode
-      const folderPath = folderNode.__path || `${basePath}${folderName}/`;
-      
-      console.log('Fetching folder contents for:', { 
-        bucket, 
-        folderPath, 
-        folderName, 
-        folderNodePath: folderNode.__path,
-        basePath,
-        constructedPath: `${basePath}${folderName}/`
-      });
-      
-      // Fetch the folder contents from S3
-      const response = await fetch('http://localhost:8080/rest/list-s3', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accessKey: s3Config.accessKey,
-          secretKey: s3Config.secretKey,
-          region: s3Config.region,
-          bucket: bucket,
-          path: folderPath
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch folder contents: ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      console.log('Folder contents response:', result);
-      
-      if (result.error) {
-        throw new Error(result.error);
-      }
-      
-      // Extract files and subfolders from the response
-      const files = result.files || [];
-      const subfolders = result.folders || [];
-      
-      // Create the folder content structure
-      const folderContents = {};
-      
-      // Add subfolders
-      subfolders.forEach(subfolder => {
-        const subfolderName = subfolder.replace(folderPath, '').replace('/', '');
-        if (subfolderName) {
-          folderContents[subfolderName] = {
-            __folder: true,
-            __path: subfolder,
-            __hasContent: false,
-            __expanded: false
-          };
-        }
-      });
-      
-      // Add files
-      files.forEach(file => {
-        const fileName = file.replace(folderPath, '');
-        if (fileName && !fileName.includes('/')) { // Only direct files, not nested
-          folderContents[fileName] = { __file: file };
-        }
-      });
-      
-      console.log('Created folder contents:', folderContents);
-      
-      // Update the tree data with the new folder contents
-      setS3Files(prevFiles => {
-        const updatedFiles = { ...prevFiles };
-        
-        // Navigate to the folder and update its contents
-        // We need to find the folder in the tree structure
-        const updateFolderInTree = (node, targetName) => {
-          if (node[targetName]) {
-            node[targetName] = {
-              ...node[targetName],
-              ...folderContents,
-              __expanded: true
-            };
-            return true;
-          }
-          
-          // Search recursively in subfolders
-          for (const key in node) {
-            if (key.startsWith('__')) continue;
-            if (typeof node[key] === 'object' && node[key].__folder) {
-              if (updateFolderInTree(node[key], targetName)) {
-                return true;
-              }
-            }
-          }
-          return false;
-        };
-        
-        const found = updateFolderInTree(updatedFiles, folderName);
-        console.log('Folder update result:', found ? 'success' : 'failed');
-        
-        return updatedFiles;
-      });
-      
-      console.log('Folder expanded successfully:', folderName);
-      
-    } catch (error) {
-      console.error('Error expanding folder:', error);
-      // You could show an error message to the user here
-    }
-  };
+
   
   // Handle import
   const handleImport = async () => {
@@ -502,74 +365,28 @@ export default function StepWizard() {
     setImportError('');
   };
   
-  // Get current files based on data source
+  // Get current files based on data source - treat both the same way
   const getCurrentFiles = () => {
     if (dataSource === 's3') {
-      return s3Files;
+      return s3Files || [];
     }
     
-    // For local files, extract the file paths from File objects
-    if (localFiles && localFiles.length > 0) {
-      const filePaths = localFiles.map(file => {
-        // Use webkitRelativePath if available (for folder uploads), otherwise use name
-        const path = file.webkitRelativePath || file.name;
-        console.log('Processing local file:', { name: file.name, webkitRelativePath: file.webkitRelativePath, finalPath: path });
-        return path;
-      });
-      console.log('Final filePaths for local files:', filePaths);
-      return filePaths;
-    }
-    
-    return [];
+    return localFiles || [];
   };
   
-  // Filter files based on type and search
+  // Filter files based on type and search - identical for both data sources
   const getFilteredFiles = () => {
-    if (dataSource === 's3') {
-      // For S3, extract files from the tree structure and apply filtering
-      if (!s3Files || Object.keys(s3Files).length === 0) {
-        return [];
-      }
-      
-      // Convert S3 tree to flat file list
-      const s3FileList = [];
-      function extractFiles(node, path = '') {
-        for (const key in node) {
-          if (key.startsWith('__')) continue; // Skip metadata properties
-          
-          if (node[key].__file) {
-            // This is a file
-            s3FileList.push(node[key].__file);
-          } else if (typeof node[key] === 'object') {
-            // This is a subfolder, recursively extract files
-            extractFiles(node[key], path ? `${path}/${key}` : key);
-          }
-        }
-      }
-      
-      extractFiles(s3Files);
-      
-      // Apply filtering to S3 files
-      const filtered = s3FileList.filter(f => {
-        const matchesType = fileType === 'All' || f.toLowerCase().endsWith('.' + fileType.toLowerCase());
-        const matchesSearch = search === '' || f.toLowerCase().includes(search.toLowerCase());
-        return matchesType && matchesSearch;
-      });
-      
-      return filtered;
-    }
-    
-    // For local files, filter the file array
     const files = getCurrentFiles();
     
-    if (!Array.isArray(files)) {
+    if (!Array.isArray(files) || files.length === 0) {
       return [];
     }
     
-    // Apply filtering for local files
+    // Apply filtering to files - same logic for both local and S3
     const filtered = files.filter(f => {
-      const matchesType = fileType === 'All' || f.toLowerCase().endsWith('.' + fileType.toLowerCase());
-      const matchesSearch = search === '' || f.toLowerCase().includes(search.toLowerCase());
+      const filePath = f.webkitRelativePath || f.name;
+      const matchesType = fileType === 'All' || filePath.toLowerCase().endsWith('.' + fileType.toLowerCase());
+      const matchesSearch = search === '' || filePath.toLowerCase().includes(search.toLowerCase());
       return matchesType && matchesSearch;
     });
     
@@ -808,7 +625,6 @@ export default function StepWizard() {
                   selectedFiles={selectedFiles}
                   onFileToggle={handleFileToggle}
                   onFolderToggle={handleFolderToggle}
-                  onFolderExpand={handleFolderExpand}
                   height={400}
                   maxWidth="100%"
                   isTreeData={false}

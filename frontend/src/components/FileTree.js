@@ -3,7 +3,7 @@ import { SimpleTreeView, TreeItem } from '@mui/x-tree-view';
 import { Checkbox, Box } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { FaFileCsv, FaFileAlt, FaFileCode, FaFile } from 'react-icons/fa';
+import { FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaFolder } from 'react-icons/fa';
 
 // Helper function to get file icon
 function getFileIcon(filename) {
@@ -21,6 +21,14 @@ function buildFileTree(files) {
     return {};
   }
   
+  console.log('buildFileTree: Processing', files.length, 'files');
+  console.log('buildFileTree: Sample files:', files.slice(0, 3).map(f => ({
+    name: f?.name,
+    webkitRelativePath: f?.webkitRelativePath,
+    type: typeof f,
+    isString: typeof f === 'string'
+  })));
+  
   const root = {};
   for (const file of files) {
     if (!file) continue; // Skip null/undefined files
@@ -28,16 +36,33 @@ function buildFileTree(files) {
     const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
     if (!path) continue; // Skip files without valid paths
     
+    console.log('buildFileTree: Processing path:', path);
     const parts = path.split('/');
+    console.log('buildFileTree: Path parts:', parts);
+    
     let current = root;
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
+      console.log(`buildFileTree: Creating/accessing part ${i}: "${part}"`);
+      
       if (!current[part]) {
-        current[part] = i === parts.length - 1 ? { __file: path } : {};
+        if (i === parts.length - 1) {
+          // Last part - this is the file
+          current[part] = { __file: path };
+          console.log(`buildFileTree: Created file node for "${part}"`);
+        } else {
+          // Intermediate part - this is a folder
+          current[part] = {};
+          console.log(`buildFileTree: Created folder node for "${part}"`);
+        }
       }
       current = current[part];
     }
   }
+  
+  console.log('buildFileTree: Final tree structure:', root);
+  console.log('buildFileTree: Root keys:', Object.keys(root));
+  
   return root;
 }
 
@@ -47,7 +72,10 @@ function collectAllFiles(node, path = '') {
   for (const [key, value] of Object.entries(node)) {
     const currentPath = path ? `${path}/${key}` : key;
     if (value.__file) {
-      files.push(value.__file);
+      // Skip folder placeholders
+      if (key !== '.folder_placeholder') {
+        files.push(value.__file);
+      }
     } else {
       files = files.concat(collectAllFiles(value, currentPath));
     }
@@ -146,10 +174,18 @@ export default function FileTree({
     }
     
     const elements = Object.entries(node).map(([key, value], idx) => {
-      console.log('Processing tree item:', { key, value, hasFile: value && value.__file });
+      console.log('Processing tree item:', { key, value, hasFile: value && value.__file, isObject: typeof value === 'object' });
       const id = path ? `${path}/${key}` : key;
+      
       if (value && value.__file) {
+        // Skip folder placeholders - don't render them
+        if (key === '.folder_placeholder') {
+          console.log('Skipping folder placeholder:', key);
+          return null;
+        }
+        
         // File node
+        console.log('Rendering file:', key);
         return (
           <TreeItem key={id} itemId={id} label={
             <span>
@@ -166,6 +202,12 @@ export default function FileTree({
         );
       } else if (value && typeof value === 'object') {
         // Folder node
+        console.log('Rendering folder:', key, 'with children:', Object.keys(value));
+        const childElements = renderTree(value, id);
+        const hasVisibleChildren = childElements && childElements.some(child => child !== null);
+        
+        console.log('Folder has visible children:', hasVisibleChildren);
+        
         const { checked, indeterminate } = getFolderCheckboxState(value, selectedFiles, id);
         return (
           <TreeItem key={id} itemId={id} label={
@@ -180,15 +222,16 @@ export default function FileTree({
                 size="small"
                 sx={{ p: 0, mr: 1 }}
               />
-              {key}
+              <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
+              {key} ({Object.keys(value).length} items)
             </span>
           }>
-            {renderTree(value, id)}
+            {childElements}
           </TreeItem>
         );
       }
       return null;
-    });
+    }).filter(element => element !== null);
     
     console.log('renderTree returning elements:', elements);
     return elements;
