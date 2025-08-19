@@ -21,63 +21,23 @@ function buildFileTree(files) {
     return {};
   }
   
-  console.log('buildFileTree input:', files);
-  
   const root = {};
-  
-  // Process each file/folder path to build the tree structure
-  for (const item of files) {
-    if (!item) continue;
+  for (const file of files) {
+    if (!file) continue; // Skip null/undefined files
     
-    const path = item.webkitRelativePath || (typeof item === 'string' ? item : item.name);
-    if (!path) continue;
+    const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
+    if (!path) continue; // Skip files without valid paths
     
-    console.log('Processing path:', path);
-    
-    // Handle S3-style paths that end with '/' for folders
-    const isFolder = path.endsWith('/');
-    
-    if (isFolder) {
-      // This is a folder path like "click-bench/"
-      const folderName = path.slice(0, -1); // Remove trailing slash
-      console.log('Creating folder:', folderName);
-      
-      if (!root[folderName]) {
-        root[folderName] = {}; // Create empty folder object
+    const parts = path.split('/');
+    let current = root;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (!current[part]) {
+        current[part] = i === parts.length - 1 ? { __file: path } : {};
       }
-    } else {
-      // This is a file path - parse it to build folder structure
-      const pathParts = path.split('/');
-      console.log('File path parts:', pathParts);
-      
-      if (pathParts.length === 1) {
-        // File at root level
-        const fileName = pathParts[0];
-        root[fileName] = { __file: path };
-        console.log('Added root file:', fileName);
-      } else {
-        // File in a folder - build the folder structure
-        let currentLevel = root;
-        
-        // Create folder structure for all parts except the last (which is the filename)
-        for (let i = 0; i < pathParts.length - 1; i++) {
-          const folderName = pathParts[i];
-          if (!currentLevel[folderName]) {
-            currentLevel[folderName] = {};
-            console.log('Created folder level:', folderName);
-          }
-          currentLevel = currentLevel[folderName];
-        }
-        
-        // Add the file at the current level
-        const fileName = pathParts[pathParts.length - 1];
-        currentLevel[fileName] = { __file: path };
-        console.log('Added file in folder:', fileName, 'at path:', path);
-      }
+      current = current[part];
     }
   }
-  
-  console.log('buildFileTree result:', root);
   return root;
 }
 
@@ -112,8 +72,7 @@ export default function FileTree({
   renderFileActions = null,
   height = 400,
   maxWidth = 600,
-  isTreeData = false, // New prop to indicate if files is already tree data
-  onFolderExpand = null // New prop for lazy loading folder contents
+  isTreeData = false // New prop to indicate if files is already tree data
 }) {
   
   // Build tree data with handlers attached
@@ -136,7 +95,7 @@ export default function FileTree({
       tree = buildFileTree(files);
     }
     
-    // Always attach handlers if we have a valid tree
+    // Only attach handlers if we have a valid tree
     if (tree && typeof tree === 'object') {
       function attachHandlers(node) {
         if (!node || typeof node !== 'object') return;
@@ -144,11 +103,9 @@ export default function FileTree({
         for (const key in node) {
           if (node[key] && typeof node[key] === 'object') {
             if (node[key].__file) {
-              // File node - attach selection state and toggle handler
               node[key].selected = selectedFiles.includes(node[key].__file);
               node[key].onToggle = onFileToggle;
             } else {
-              // Folder node - recursively attach handlers
               attachHandlers(node[key]);
             }
           }
@@ -161,39 +118,44 @@ export default function FileTree({
   }, [files, selectedFiles, onFileToggle, isTreeData]);
   
   // Early return if no files or invalid data
+  console.log('FileTree: treeData check:', { 
+    treeData, 
+    type: typeof treeData, 
+    keys: Object.keys(treeData || {}),
+    length: Object.keys(treeData || {}).length 
+  });
+  
   if (!treeData || (typeof treeData === 'object' && Object.keys(treeData).length === 0)) {
+    console.log('FileTree: Early return triggered');
     return (
       <Box sx={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.secondary' }}>
         No files to display
       </Box>
     );
   }
+  
+  console.log('FileTree: Proceeding to render tree');
 
   // Helper: Recursively render the tree
   function renderTree(node, path = '') {
-    console.log('FileTree: renderTree called with:', { node, path, keys: Object.keys(node) });
+    console.log('renderTree called with:', { node, path, nodeKeys: Object.keys(node || {}) });
     
     if (!node || typeof node !== 'object') {
-      console.log('FileTree: renderTree early return - invalid node');
+      console.log('renderTree: Invalid node, returning null');
       return null;
     }
     
     const elements = Object.entries(node).map(([key, value], idx) => {
+      console.log('Processing tree item:', { key, value, hasFile: value && value.__file });
       const id = path ? `${path}/${key}` : key;
-      console.log('FileTree: Processing node:', { key, value, id, hasFile: value && value.__file });
-      
       if (value && value.__file) {
         // File node
-        console.log('FileTree: Creating file node for:', key);
         return (
           <TreeItem key={id} itemId={id} label={
             <span>
               <Checkbox
                 checked={value.selected || false}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  value.onToggle && value.onToggle(value.__file);
-                }}
+                onChange={() => value.onToggle && value.onToggle(value.__file)}
                 size="small"
                 sx={{ p: 0, mr: 1 }}
               />
@@ -204,12 +166,7 @@ export default function FileTree({
         );
       } else if (value && typeof value === 'object') {
         // Folder node
-        console.log('FileTree: Creating folder node for:', key);
         const { checked, indeterminate } = getFolderCheckboxState(value, selectedFiles, id);
-        
-        // Check if folder has content (is expandable)
-        const hasContent = Object.keys(value).length > 0;
-        
         return (
           <TreeItem key={id} itemId={id} label={
             <span>
@@ -223,47 +180,28 @@ export default function FileTree({
                 size="small"
                 sx={{ p: 0, mr: 1 }}
               />
-              <span 
-                style={{ 
-                  marginLeft: '4px', 
-                  cursor: hasContent ? 'pointer' : 'default',
-                  color: hasContent ? '#1976d2' : '#666'
-                }}
-              >
-                📁 {key}
-              </span>
+              {key}
             </span>
           }>
-            {hasContent ? renderTree(value, id) : null}
+            {renderTree(value, id)}
           </TreeItem>
         );
       }
       return null;
     });
     
-    console.log('FileTree: renderTree returning elements:', elements);
+    console.log('renderTree returning elements:', elements);
     return elements;
   }
 
   const treeElements = renderTree(treeData);
-  console.log('FileTree: renderTree result:', treeElements);
-  console.log('FileTree: treeElements length:', treeElements ? treeElements.length : 'null');
-  
-  // Debug: Check if treeElements are valid React components
-  if (treeElements && Array.isArray(treeElements)) {
-    treeElements.forEach((element, index) => {
-      console.log(`Tree element ${index}:`, element);
-      console.log(`Tree element ${index} type:`, typeof element);
-      console.log(`Tree element ${index} is React element:`, React.isValidElement(element));
-    });
-  }
   
   return (
     <SimpleTreeView
       aria-label="file tree"
       defaultCollapseIcon={<ExpandMoreIcon />}
       defaultExpandIcon={<ChevronRightIcon />}
-      sx={{ height, flexGrow: 1, maxWidth, overflowY: 'auto' }}
+      sx={{ height, flexGrow: 1, maxWidth, overflowY: 'auto', mb: 2 }}
     >
       {treeElements}
     </SimpleTreeView>

@@ -85,13 +85,12 @@ export default function S3Input({
           size="small"
           placeholder="s3://bucket/prefix/"
           sx={{ flex: 1, minWidth: 300 }}
-          helperText="Full S3 path (e.g., s3://alex-datasets-2/)"
         />
         <Button 
           variant="contained" 
           onClick={onConnect} 
           disabled={loading || !config.accessKey || !config.secretKey || !config.s3Path}
-          sx={{ minWidth: 100 }}
+          sx={{ minWidth: 100, height: 40 }}
         >
           {loading ? 'Connecting...' : 'Connect'}
         </Button>

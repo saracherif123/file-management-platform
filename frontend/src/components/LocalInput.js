@@ -8,7 +8,8 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel
+  InputLabel,
+  Typography
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import { styled } from '@mui/material/styles';
@@ -67,7 +68,7 @@ export default function LocalInput({
           />
         </Box>
         <Button variant="contained" component="label" disabled={uploading}>
-          Upload
+          Upload Files & Folders
           <input
             type="file"
             hidden
@@ -85,8 +86,22 @@ export default function LocalInput({
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
+        sx={{
+          minHeight: 80,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'all 0.2s ease-in-out'
+        }}
       >
-        Drag and drop a file here
+        <Box textAlign="center">
+          <Typography variant="body2" color="text.secondary">
+            {isDragOver ? 'Drop files here' : 'Drag and drop files or folders here'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+            Supports multiple files and folder structures
+          </Typography>
+        </Box>
       </DragDropArea>
     </Stack>
   );
