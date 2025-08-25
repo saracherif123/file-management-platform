@@ -596,6 +596,14 @@ export default function StepWizard() {
                   onClick={() => handleDataSourceChange('postgres')}
                   sx={{ flex: 1 }}
                   size="large"
+                  startIcon={
+                    <img 
+                      src="/postgresql.svg" 
+                      alt="PostgreSQL Logo" 
+                      width="20" 
+                      height="20"
+                    />
+                  }
                 >
                   PostgreSQL
                 </Button>

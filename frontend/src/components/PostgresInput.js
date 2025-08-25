@@ -7,7 +7,17 @@ import {
   Box,
   Alert
 } from '@mui/material';
-import { Storage } from '@mui/icons-material';
+
+
+// Official PostgreSQL Logo Component
+const PostgresIcon = () => (
+  <img 
+    src="/postgresql.svg" 
+    alt="PostgreSQL Logo" 
+    width="28" 
+    height="28"
+  />
+);
 
 export default function PostgresInput({ 
   config, 
@@ -26,7 +36,7 @@ export default function PostgresInput({
   return (
     <Stack spacing={3}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Storage color="primary" />
+        <PostgresIcon />
         <Typography variant="h6">PostgreSQL Connection</Typography>
       </Box>
 
