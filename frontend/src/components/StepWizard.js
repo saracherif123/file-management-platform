@@ -458,8 +458,20 @@ export default function StepWizard() {
     // Apply filtering to files - same logic for both local and S3
     const filtered = files.filter(f => {
       const filePath = f.webkitRelativePath || f.name;
-      const matchesType = fileType === 'All' || filePath.toLowerCase().endsWith('.' + fileType.toLowerCase());
-      const matchesSearch = search === '' || filePath.toLowerCase().includes(search.toLowerCase());
+      const fileName = f.name || '';
+      const fileExtension = fileName.split('.').pop().toLowerCase();
+      
+      // Check if file type matches (All or specific extension)
+      const matchesType = fileType === 'All' || fileExtension === fileType.toLowerCase();
+      
+      // Enhanced search: check file path, name, and extension
+      const searchLower = search.toLowerCase();
+      const matchesSearch = search === '' || 
+        filePath.toLowerCase().includes(searchLower) ||
+        fileName.toLowerCase().includes(searchLower) ||
+        (searchLower.startsWith('.') && fileExtension.includes(searchLower.substring(1))) ||
+        (searchLower.includes('.') && fileExtension.includes(searchLower.split('.').pop()));
+      
       return matchesType && matchesSearch;
     });
     
@@ -646,6 +658,7 @@ export default function StepWizard() {
                     <option value="parquet">Parquet</option>
                     <option value="pdf">PDF</option>
                     <option value="txt">Text</option>
+                    <option value="sql">SQL</option>
                   </select>
                   
                   <input
