@@ -86,7 +86,7 @@ public class PostgresService {
  
 
     /**
-     * Get all schemas
+     * Get all user-defined schemas (exclude system and analytics schemas)
      */
     private List<String> getSchemas(Connection connection) throws SQLException {
         List<String> schemas = new ArrayList<>();
@@ -95,6 +95,28 @@ public class PostgresService {
              ResultSet rs = stmt.executeQuery(
                  "SELECT schema_name FROM information_schema.schemata " +
                  "WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast') " +
+                 "AND schema_name NOT LIKE 'pg_%' " +
+                 "AND schema_name NOT LIKE 'temp%' " +
+                 "AND schema_name NOT LIKE 'tmp%' " +
+                 "AND schema_name NOT LIKE 'pgagent%' " +
+                 "AND schema_name NOT LIKE 'pg_stat%' " +
+                 "AND schema_name NOT LIKE 'pg_temp%' " +
+                 "AND schema_name NOT LIKE 'pg_toast%' " +
+                 "AND schema_name NOT LIKE 'information_schema%' " +
+                 "AND schema_name NOT LIKE 'cron%' " +
+                 "AND schema_name NOT LIKE 'extensions%' " +
+                 "AND schema_name NOT LIKE 'realtime%' " +
+                 "AND schema_name NOT LIKE 'supabase%' " +
+                 "AND schema_name NOT LIKE 'auth%' " +
+                 "AND schema_name NOT LIKE 'storage%' " +
+                 "AND schema_name NOT LIKE 'vault%' " +
+                 "AND schema_name NOT LIKE 'graphql%' " +
+                 "AND schema_name NOT LIKE 'graphql_public%' " +
+                 "AND schema_name NOT LIKE 'net%' " +
+                 "AND schema_name NOT LIKE 'tiger%' " +
+                 "AND schema_name NOT LIKE 'tiger_data%' " +
+                 "AND schema_name NOT LIKE 'topology%' " +
+                 "AND schema_name NOT LIKE 'analytics%' " +
                  "ORDER BY schema_name")) {
             
             while (rs.next()) {
@@ -106,7 +128,7 @@ public class PostgresService {
     }
 
     /**
-     * Get all tables in a schema
+     * Get all user-defined tables in a schema (exclude system tables)
      */
     private List<String> getTablesInSchema(Connection connection, String schema) throws SQLException {
         List<String> tables = new ArrayList<>();
@@ -114,6 +136,11 @@ public class PostgresService {
         try (PreparedStatement stmt = connection.prepareStatement(
                 "SELECT table_name FROM information_schema.tables " +
                 "WHERE table_schema = ? AND table_type = 'BASE TABLE' " +
+                "AND table_name NOT LIKE 'pg_%' " +
+                "AND table_name NOT LIKE 'sql_%' " +
+                "AND table_name NOT LIKE 'temp%' " +
+                "AND table_name NOT LIKE 'tmp%' " +
+                "AND table_name NOT IN ('schema_migrations', 'ar_internal_metadata', 'sessions', 'users', 'pg_stat_statements', 'pg_stat_activity', 'pg_stat_database', 'pg_stat_user_tables', 'pg_stat_user_indexes', 'pg_stat_user_functions') " +
                 "ORDER BY table_name")) {
             
             stmt.setString(1, schema);
@@ -128,14 +155,19 @@ public class PostgresService {
     }
 
     /**
-     * Get all views in a schema
+     * Get all user-defined views in a schema (exclude system views)
      */
     private List<String> getViewsInSchema(Connection connection, String schema) throws SQLException {
         List<String> views = new ArrayList<>();
         
         try (PreparedStatement stmt = connection.prepareStatement(
                 "SELECT table_name FROM information_schema.views " +
-                "WHERE table_schema = ? ORDER BY table_name")) {
+                "WHERE table_schema = ? " +
+                "AND table_name NOT LIKE 'pg_%' " +
+                "AND table_name NOT LIKE 'sql_%' " +
+                "AND table_name NOT LIKE 'temp%' " +
+                "AND table_name NOT LIKE 'tmp%' " +
+                "ORDER BY table_name")) {
             
             stmt.setString(1, schema);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -170,5 +202,105 @@ public class PostgresService {
         }
         
         return objects;
+    }
+
+    /**
+     * Get table schema information
+     */
+    public Map<String, Object> getTableSchema(PostgresRequest request, String tableName) throws SQLException {
+        Map<String, Object> result = new HashMap<>();
+        List<Map<String, String>> columns = new ArrayList<>();
+        
+        try (Connection connection = createConnection(request)) {
+            String schema = request.getSchema();
+            if (schema == null || schema.isEmpty()) {
+                schema = "public"; // Default to public schema
+            }
+            
+            try (PreparedStatement stmt = connection.prepareStatement(
+                    "SELECT column_name, data_type, is_nullable, column_default, character_maximum_length " +
+                    "FROM information_schema.columns " +
+                    "WHERE table_schema = ? AND table_name = ? " +
+                    "ORDER BY ordinal_position")) {
+                
+                stmt.setString(1, schema);
+                stmt.setString(2, tableName);
+                
+                try (ResultSet rs = stmt.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, String> column = new HashMap<>();
+                        column.put("name", rs.getString("column_name"));
+                        column.put("type", rs.getString("data_type"));
+                        column.put("nullable", rs.getString("is_nullable"));
+                        column.put("default", rs.getString("column_default"));
+                        column.put("maxLength", rs.getString("character_maximum_length"));
+                        columns.add(column);
+                    }
+                }
+            }
+            
+            result.put("table", schema + "." + tableName);
+            result.put("columns", columns);
+        }
+        
+        return result;
+    }
+
+    /**
+     * Get sample data from a table
+     */
+    public Map<String, Object> getTableSample(PostgresRequest request, String tableName, int limit) throws SQLException {
+        Map<String, Object> result = new HashMap<>();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        List<String> columnNames = new ArrayList<>();
+        
+        try (Connection connection = createConnection(request)) {
+            String schema = request.getSchema();
+            if (schema == null || schema.isEmpty()) {
+                schema = "public"; // Default to public schema
+            }
+            
+            // Get column names first
+            try (PreparedStatement stmt = connection.prepareStatement(
+                    "SELECT column_name FROM information_schema.columns " +
+                    "WHERE table_schema = ? AND table_name = ? " +
+                    "ORDER BY ordinal_position")) {
+                
+                stmt.setString(1, schema);
+                stmt.setString(2, tableName);
+                
+                try (ResultSet rs = stmt.executeQuery()) {
+                    while (rs.next()) {
+                        columnNames.add(rs.getString("column_name"));
+                    }
+                }
+            }
+            
+            // Get sample data
+            try (PreparedStatement stmt = connection.prepareStatement(
+                    "SELECT * FROM " + schema + "." + tableName + " LIMIT ?")) {
+                
+                stmt.setInt(1, limit);
+                
+                try (ResultSet rs = stmt.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> row = new HashMap<>();
+                        for (int i = 0; i < columnNames.size(); i++) {
+                            String columnName = columnNames.get(i);
+                            Object value = rs.getObject(i + 1);
+                            row.put(columnName, value);
+                        }
+                        rows.add(row);
+                    }
+                }
+            }
+            
+            result.put("table", schema + "." + tableName);
+            result.put("columns", columnNames);
+            result.put("rows", rows);
+            result.put("limit", limit);
+        }
+        
+        return result;
     }
 }

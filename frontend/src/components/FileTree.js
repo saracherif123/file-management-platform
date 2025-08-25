@@ -2,16 +2,41 @@ import React from 'react';
 import { Checkbox, Box, IconButton, Collapse } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaFolder, FaFilePdf, FaTrash } from 'react-icons/fa';
+import { FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaFolder, FaFilePdf, FaTrash, FaTable, FaEye, FaDatabase } from 'react-icons/fa';
+import TablePreviewDialog from './TablePreviewDialog';
 
 // Helper function to get file icon
 function getFileIcon(filename) {
+  // PostgreSQL objects (schema.table format)
+  if (filename.includes('.') && !filename.includes('/')) {
+    // This is likely a PostgreSQL object (schema.table)
+    return <FaTable color="#336791" style={{ marginRight: 8 }} />;
+  }
+  
+  // File extensions
   if (filename.endsWith('.csv')) return <FaFileCsv color="#2a9d8f" style={{ marginRight: 8 }} />;
   if (filename.endsWith('.json')) return <FaFileCode color="#e76f51" style={{ marginRight: 8 }} />;
   if (filename.endsWith('.parquet')) return <FaFileAlt color="#264653" style={{ marginRight: 8 }} />;
   if (filename.endsWith('.pdf')) return <FaFilePdf color="#e74c3c" style={{ marginRight: 8 }} />;
   if (filename.endsWith('.txt')) return <FaFileAlt color="#6d6875" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.sql')) return <FaFileCode color="#f4a261" style={{ marginRight: 8 }} />;
+  
   return <FaFile style={{ marginRight: 8 }} />;
+}
+
+// Helper function to get folder icon (for PostgreSQL schemas)
+function getFolderIcon(folderName, files) {
+  // Check if this folder contains PostgreSQL objects (schema.table format)
+  const hasPostgresObjects = files.some(file => {
+    const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
+    return path && path.includes('.') && !path.includes('/') && path.startsWith(folderName + '.');
+  });
+  
+  if (hasPostgresObjects) {
+    return <FaDatabase color="#336791" style={{ marginRight: 8 }} />;
+  }
+  
+  return <FaFolder color="#f4a261" style={{ marginRight: 8 }} />;
 }
 
 // Helper: Build a tree from file paths
@@ -101,7 +126,9 @@ export default function FileTree({
   renderFileActions = null,
   height = 400,
   maxWidth = 600,
-  isTreeData = false // New prop to indicate if files is already tree data
+  isTreeData = false, // New prop to indicate if files is already tree data
+  dataSource = 'local', // New prop to indicate data source type
+  postgresConfig = null // New prop for PostgreSQL connection details
 }) {
   console.log('FileTree: Component re-rendering with props:', { 
     filesLength: files?.length, 
@@ -121,6 +148,46 @@ export default function FileTree({
       return [];
     }
   });
+
+  // State for table preview dialog
+  const [previewDialogOpen, setPreviewDialogOpen] = React.useState(false);
+  const [previewData, setPreviewData] = React.useState(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
+  const [previewError, setPreviewError] = React.useState(null);
+
+  // Function to handle table preview
+  const handleTablePreview = async (tableName) => {
+    if (dataSource !== 'postgres' || !postgresConfig) return;
+    
+    setPreviewDialogOpen(true);
+    setPreviewLoading(true);
+    setPreviewError(null);
+    
+    try {
+      const response = await fetch('http://localhost:8080/rest/postgres-table-preview', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...postgresConfig,
+          table: tableName
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setPreviewData(data);
+    } catch (error) {
+      console.error('Error fetching table preview:', error);
+      setPreviewError(error.message);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
   
 
   
@@ -270,7 +337,19 @@ export default function FileTree({
                   sx={{ p: 0, mr: 1 }}
                 />
                 {getFileIcon(key)}
-                <span>{key}</span>
+                <span 
+                  style={{ 
+                    cursor: dataSource === 'postgres' && key.includes('.') ? 'pointer' : 'default',
+                    textDecoration: dataSource === 'postgres' && key.includes('.') ? 'underline' : 'none'
+                  }}
+                  onClick={() => {
+                    if (dataSource === 'postgres' && key.includes('.') && !key.includes('/')) {
+                      handleTablePreview(key);
+                    }
+                  }}
+                >
+                  {key}
+                </span>
                 {renderFileActions && renderFileActions(value.__file)}
               </Box>
               
@@ -343,7 +422,7 @@ export default function FileTree({
                   size="small"
                   sx={{ p: 0, mr: 1 }}
                 />
-                <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
+                {getFolderIcon(key, files)}
                 <span style={{ cursor: 'pointer', flex: 1 }}>
                   {key}
                 </span>
@@ -421,7 +500,11 @@ export default function FileTree({
             borderRadius: '50%', 
             backgroundColor: 'primary.main' 
           }} />
-          <span>Local Files: {totalFiles} available</span>
+          <span>
+            {dataSource === 'postgres' ? 'Database Objects' : 
+             dataSource === 's3' ? 'S3 Objects' : 
+             'Local Files'}: {totalFiles} available
+          </span>
         </Box>
         <Box sx={{ 
           display: 'flex', 
@@ -430,10 +513,18 @@ export default function FileTree({
           color: selectedCount > 0 ? 'primary.main' : 'text.secondary',
           fontWeight: selectedCount > 0 ? 'medium' : 'normal'
         }}>
-          <span>Selected: {selectedCount} files</span>
+          <span>Selected: {selectedCount} {dataSource === 'postgres' ? 'objects' : 'files'}</span>
         </Box>
       </Box>
       
+      {/* Table Preview Dialog */}
+      <TablePreviewDialog
+        open={previewDialogOpen}
+        onClose={() => setPreviewDialogOpen(false)}
+        tableData={previewData}
+        loading={previewLoading}
+        error={previewError}
+      />
 
     </Box>
   );

@@ -299,4 +299,39 @@ public class FileController {
             return ResponseEntity.status(500).body(error);
         }
     }
+
+    @PostMapping("/postgres-table-preview")
+    public ResponseEntity<Map<String, Object>> getPostgresTablePreview(@RequestBody PostgresRequest postgresRequest) {
+        try {
+            String tableName = postgresRequest.getTable();
+            if (tableName == null || tableName.isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("error", "Table name is required");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            // Extract table name from schema.table format if present
+            String actualTableName = tableName;
+            if (tableName.contains(".")) {
+                String[] parts = tableName.split("\\.");
+                if (parts.length == 2) {
+                    postgresRequest.setSchema(parts[0]);
+                    actualTableName = parts[1];
+                }
+            }
+
+            Map<String, Object> schema = postgresService.getTableSchema(postgresRequest, actualTableName);
+            Map<String, Object> sample = postgresService.getTableSample(postgresRequest, actualTableName, 5);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("schema", schema);
+            result.put("sample", sample);
+            
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Failed to get table preview: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
 } 

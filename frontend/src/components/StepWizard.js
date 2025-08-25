@@ -790,6 +790,8 @@ export default function StepWizard() {
                   height={400}
                   maxWidth="100%"
                   isTreeData={false}
+                  dataSource={dataSource}
+                  postgresConfig={dataSource === 'postgres' ? postgresConfig : null}
                 />
               )}
               
