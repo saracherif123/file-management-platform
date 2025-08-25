@@ -774,7 +774,7 @@ export default function StepWizard() {
                 Import Completed Successfully!
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                {selectedFiles.length} files have been imported to DataLoom.
+                {selectedFiles.length} files have been imported successfully.
               </Typography>
             </CardContent>
             

@@ -91,9 +91,9 @@ public class S3Service {
     }
 
     /**
-     * Download and prepare S3 files for DataLoom processing
+     * Download and prepare S3 files for processing
      */
-    public Map<String, Object> loadS3FilesForDataLoom(S3Request s3Request) {
+    public Map<String, Object> loadS3Files(S3Request s3Request) {
         Map<String, Object> result = new HashMap<>();
         List<String> processedFiles = new java.util.ArrayList<>();
         List<String> failedFiles = new java.util.ArrayList<>();
@@ -118,7 +118,7 @@ public class S3Service {
                     
                     // Here you would typically:
                     // 1. Validate the file format (CSV, JSON, Parquet, etc.)
-                    // 2. Process the data for DataLoom
+                    // 2. Process the data
                     // 3. Store metadata about the loaded file
                     
                 } catch (Exception e) {

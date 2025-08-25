@@ -114,7 +114,7 @@ export default function ImportWizard() {
 
 
   // S3 import with progress tracking
-  const handleLoadToDataLoomWithProgress = async () => {
+  const handleLoadWithProgress = async () => {
     if (selectedS3Files.length === 0) {
       setSnackbar({ open: true, message: 'Please select at least one S3 file to load.', severity: 'warning' });
       return;
@@ -251,7 +251,7 @@ export default function ImportWizard() {
                 <Button 
                   variant="contained" 
                   color="primary"
-                  onClick={handleLoadToDataLoomWithProgress}
+                  onClick={handleLoadWithProgress}
                   disabled={s3ImportProgress.isImporting}
                   startIcon={s3ImportProgress.isImporting ? <CircularProgress size={20} /> : null}
                 >

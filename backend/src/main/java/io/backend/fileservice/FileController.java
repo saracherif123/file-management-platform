@@ -122,7 +122,7 @@ public class FileController {
         logger.info("Received S3 files to load: {}", s3Request.getFiles());
         
         try {
-            Map<String, Object> result = s3Service.loadS3FilesForDataLoom(s3Request);
+            Map<String, Object> result = s3Service.loadS3Files(s3Request);
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             Map<String, Object> error = new HashMap<>();
