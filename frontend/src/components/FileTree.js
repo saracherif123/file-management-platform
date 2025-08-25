@@ -221,7 +221,7 @@ export default function FileTree({
                   onFolderToggle(value, id);
                 }}
                 size="small"
-                sx={{ p: 0, mr: 1 }}
+                sx={{ p: 0, mr:1 }}
               />
               <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
               {key}
@@ -240,15 +240,53 @@ export default function FileTree({
 
   const treeElements = renderTree(treeData);
   
+  // Calculate total files and selected files
+  const totalFiles = files ? files.length : 0;
+  const selectedCount = selectedFiles ? selectedFiles.length : 0;
+  
   return (
-    <SimpleTreeView
-      aria-label="file tree"
-      defaultCollapseIcon={<ExpandMoreIcon />}
-      defaultExpandIcon={<ChevronRightIcon />}
-      sx={{ height, flexGrow: 1, maxWidth, overflowY: 'auto', mb: 2 }}
-    >
-      {treeElements}
-    </SimpleTreeView>
+    <Box sx={{ height, display: 'flex', flexDirection: 'column' }}>
+      <SimpleTreeView
+        aria-label="file tree"
+        defaultCollapseIcon={<ExpandMoreIcon />}
+        defaultExpandIcon={<ChevronRightIcon />}
+        sx={{ flexGrow: 1, maxWidth, overflowY: 'auto', mb: 1 }}
+      >
+        {treeElements}
+      </SimpleTreeView>
+      
+      {/* Footer with file statistics */}
+      <Box sx={{ 
+        borderTop: 1, 
+        borderColor: 'divider', 
+        p: 1.5, 
+        backgroundColor: 'background.paper',
+        display: 'flex', 
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        fontSize: '0.875rem',
+        color: 'text.secondary'
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ 
+            width: 8, 
+            height: 8, 
+            borderRadius: '50%', 
+            backgroundColor: 'primary.main' 
+          }} />
+          <span>Local Files: {totalFiles} available</span>
+        </Box>
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 1,
+          color: selectedCount > 0 ? 'primary.main' : 'text.secondary',
+          fontWeight: selectedCount > 0 ? 'medium' : 'normal'
+        }}>
+          <span>Selected: {selectedCount} files</span>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 

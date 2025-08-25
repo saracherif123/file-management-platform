@@ -617,9 +617,7 @@ export default function StepWizard() {
                 Select Files to Import
               </Typography>
               
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                {dataSource === 's3' ? 'S3' : dataSource === 'postgres' ? 'PostgreSQL' : 'Local'} Files: {getCurrentFiles().length} available
-              </Typography>
+
               
               <Box sx={{ mb: 2 }}>
                 <Stack direction="row" spacing={2} alignItems="center">
@@ -692,14 +690,13 @@ export default function StepWizard() {
               
 
               
-              <Typography variant="body2" color="text.secondary" mt={1}>
-                Selected: {selectedFiles.length} files
-                {selectedFiles.length > 0 && (
+              {selectedFiles.length > 0 && (
+                <Typography variant="body2" color="text.secondary" mt={1}>
                   <span style={{ color: '#1976d2', fontWeight: 'bold' }}>
-                    {' '}• Ready to import
+                    Ready to import
                   </span>
-                )}
-              </Typography>
+                </Typography>
+              )}
             </CardContent>
             
             <CardActions>
