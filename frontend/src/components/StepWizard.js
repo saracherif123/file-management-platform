@@ -161,12 +161,21 @@ export default function StepWizard() {
       setS3Files(s3FileList);
       
       setActiveStep(STEPS.FILE_SELECTION);
+      
+
     } catch (error) {
       console.error('S3 connection error:', error);
       setImportError('Failed to connect to S3: ' + error.message);
     } finally {
       setS3Loading(false);
     }
+  };
+
+  // Helper function to auto-select all files
+  const autoSelectAllFiles = (fileList) => {
+    setTimeout(() => {
+      setSelectedFiles(fileList.map(f => f.webkitRelativePath || f.name));
+    }, 100);
   };
 
   // Handle PostgreSQL connection
@@ -200,6 +209,8 @@ export default function StepWizard() {
 
       setPostgresFiles(fileList);
       setActiveStep(STEPS.FILE_SELECTION);
+      
+
     } catch (error) {
       console.error('Failed to connect to PostgreSQL:', error);
       alert('Failed to connect to PostgreSQL: ' + error.message);
@@ -280,6 +291,9 @@ export default function StepWizard() {
     setLocalFiles(files);
     // Auto-advance to file selection step after upload
     setActiveStep(STEPS.FILE_SELECTION);
+    
+    // Auto-select all local files when opening file selection
+    autoSelectAllFiles(files);
   };
   
   // Handle file selection
