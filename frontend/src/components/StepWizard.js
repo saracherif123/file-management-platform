@@ -13,7 +13,7 @@ import {
   Stack,
   Alert
 } from '@mui/material';
-import { ArrowBack, ArrowForward, CheckCircle } from '@mui/icons-material';
+import { ArrowBack, ArrowForward, CheckCircle, Upload as UploadIcon } from '@mui/icons-material';
 import S3Input from './S3Input';
 import LocalInput from './LocalInput';
 import PostgresInput from './PostgresInput';
@@ -266,8 +266,8 @@ export default function StepWizard() {
   };
 
   // Handle local file upload
-  const handleLocalUpload = (files) => {
-    console.log('Local upload received files:', files);
+  const handleLocalUpload = (files, append = false) => {
+    console.log('Local upload received files:', files, 'append:', append);
     console.log('Files length:', files.length);
     console.log('First few files:', files.slice(0, 3).map(f => ({ 
       name: f.name, 
@@ -287,13 +287,33 @@ export default function StepWizard() {
       return;
     }
     
-    console.log('Setting localFiles and advancing to step 2');
-    setLocalFiles(files);
-    // Auto-advance to file selection step after upload
-    setActiveStep(STEPS.FILE_SELECTION);
-    
-    // Auto-select all local files when opening file selection
-    autoSelectAllFiles(files);
+    if (append && localFiles.length > 0) {
+      // Append new files to existing ones
+      console.log('Appending', files.length, 'new files to existing', localFiles.length, 'files');
+      const combinedFiles = [...localFiles, ...files];
+      setLocalFiles(combinedFiles);
+      
+        // Auto-select only the new files
+        const newFilePaths = files.map(f => f.webkitRelativePath || f.name);
+        setSelectedFiles(prev => {
+          const newSelection = [...prev];
+          newFilePaths.forEach(filePath => {
+            if (!newSelection.includes(filePath)) {
+              newSelection.push(filePath);
+            }
+          });
+          return newSelection;
+        });
+    } else {
+      // First upload - replace all files
+      console.log('Setting localFiles and advancing to step 2');
+      setLocalFiles(files);
+      // Auto-advance to file selection step after upload
+      setActiveStep(STEPS.FILE_SELECTION);
+      
+      // Auto-select all local files when opening file selection
+      autoSelectAllFiles(files);
+    }
   };
   
   // Handle file selection
@@ -304,6 +324,33 @@ export default function StepWizard() {
         : [...prev, filename]
     );
   }, []);
+  
+  // Handle file/folder deletion
+  const handleDelete = (itemPath, itemType) => {
+    console.log('Deleting:', itemType, itemPath);
+    
+    if (itemType === 'file') {
+      // Remove file from localFiles and selectedFiles
+      setLocalFiles(prev => prev.filter(file => {
+        const filePath = file.webkitRelativePath || file.name;
+        return filePath !== itemPath;
+      }));
+      
+      setSelectedFiles(prev => prev.filter(filePath => filePath !== itemPath));
+    } else if (itemType === 'folder') {
+      // Remove all files in the folder from localFiles and selectedFiles
+      const folderPath = itemPath;
+      
+      setLocalFiles(prev => prev.filter(file => {
+        const filePath = file.webkitRelativePath || file.name;
+        return !filePath.startsWith(folderPath + '/') && filePath !== folderPath;
+      }));
+      
+      setSelectedFiles(prev => prev.filter(filePath => 
+        !filePath.startsWith(folderPath + '/') && filePath !== folderPath
+      ));
+    }
+  };
   
   // Handle folder selection
   const handleFolderToggle = (node, path = '') => {
@@ -599,7 +646,8 @@ export default function StepWizard() {
                           name: f.name, 
                           webkitRelativePath: f.webkitRelativePath || f.fullPath || f.name
                         })));
-                        handleLocalUpload(files);
+                        // First upload - don't append
+                        handleLocalUpload(files, false);
                       }
                     }}
                   />
@@ -676,10 +724,27 @@ export default function StepWizard() {
                     }}
                   />
                   
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    size="small"
+                    startIcon={<UploadIcon />}
+                  >
+                    Choose More Files
+                    <input
+                      type="file"
+                      hidden
+                      multiple
+                      webkitdirectory="true"
+                      onChange={e => handleLocalUpload(Array.from(e.target.files), true)}
+                    />
+                  </Button>
+                  
                   {selectedFiles.length > 0 && (
                     <Button 
                       size="small" 
                       variant="outlined" 
+                      color="error"
                       onClick={() => setSelectedFiles([])}
                     >
                       Clear Selection
@@ -687,6 +752,8 @@ export default function StepWizard() {
                   )}
                 </Stack>
               </Box>
+              
+
               
               {Object.keys(treeData).length === 0 ? (
                 <Box sx={{ 
@@ -711,13 +778,75 @@ export default function StepWizard() {
                   selectedFiles={selectedFiles}
                   onFileToggle={handleFileToggle}
                   onFolderToggle={handleFolderToggle}
+                  onDelete={handleDelete}
                   height={400}
                   maxWidth="100%"
                   isTreeData={false}
                 />
               )}
               
-
+              {/* Drag and Drop Area for adding more files */}
+              {dataSource === 'local' && (
+                <Box
+                  sx={{
+                    border: '2px dashed',
+                    borderColor: localDragOver ? 'primary.main' : 'divider',
+                    borderRadius: 1,
+                    p: 2,
+                    mb: 2,
+                    textAlign: 'center',
+                    background: localDragOver ? 'action.hover' : 'inherit',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease-in-out',
+                    minHeight: 80, // Same height as initial drag area
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setLocalDragOver(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setLocalDragOver(false);
+                  }}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    setLocalDragOver(false);
+                    
+                    // Handle dropped items (can be files or directories)
+                    const items = Array.from(e.dataTransfer.items);
+                    console.log('Additional dropped items:', items.length);
+                    
+                    const files = [];
+                    
+                    // Process each dropped item
+                    for (const item of items) {
+                      if (item.kind === 'file') {
+                        const entry = item.webkitGetAsEntry();
+                        if (entry) {
+                          await processEntry(entry, files);
+                        }
+                      }
+                    }
+                    
+                    if (files.length > 0) {
+                      console.log('Processed additional dropped files:', files.length);
+                      console.log('Sample files:', files.slice(0, 3).map(f => ({ 
+                        name: f.name, 
+                        webkitRelativePath: f.webkitRelativePath || f.fullPath || f.name
+                      })));
+                      // Append new files to existing ones
+                      handleLocalUpload(files, true);
+                    }
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    {localDragOver ? 'Drop files here to add more' : 'Drag and drop more files or folders here to add to your selection'}
+                  </Typography>
+                </Box>
+              )}
               
               {selectedFiles.length > 0 && (
                 <Typography variant="body2" color="text.secondary" mt={1}>

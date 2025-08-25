@@ -2,7 +2,7 @@ import React from 'react';
 import { Checkbox, Box, IconButton, Collapse } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaFolder, FaFilePdf } from 'react-icons/fa';
+import { FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaFolder, FaFilePdf, FaTrash } from 'react-icons/fa';
 
 // Helper function to get file icon
 function getFileIcon(filename) {
@@ -97,6 +97,7 @@ export default function FileTree({
   selectedFiles, 
   onFileToggle, 
   onFolderToggle, 
+  onDelete = null, // New prop for delete functionality
   renderFileActions = null,
   height = 400,
   maxWidth = 600,
@@ -120,6 +121,8 @@ export default function FileTree({
       return [];
     }
   });
+  
+
   
   console.log('FileTree: Current expandedItems state:', expandedItems);
   
@@ -258,16 +261,35 @@ export default function FileTree({
         console.log('Rendering file:', key);
         return (
           <Box key={id} sx={{ pl: (depth + 1) * 3, py: 0.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Checkbox
-                checked={value.selected || false}
-                onChange={() => value.onToggle && value.onToggle(value.__file)}
-                size="small"
-                sx={{ p: 0, mr: 1 }}
-              />
-              {getFileIcon(key)}
-              <span>{key}</span>
-              {renderFileActions && renderFileActions(value.__file)}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <Checkbox
+                  checked={value.selected || false}
+                  onChange={() => value.onToggle && value.onToggle(value.__file)}
+                  size="small"
+                  sx={{ p: 0, mr: 1 }}
+                />
+                {getFileIcon(key)}
+                <span>{key}</span>
+                {renderFileActions && renderFileActions(value.__file)}
+              </Box>
+              
+              {onDelete && (
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete file "${key}"?`)) {
+                      onDelete(value.__file, 'file');
+                    }
+                  }}
+                  sx={{ p: 0.5, ml: 1 }}
+                  title="Delete file"
+                >
+                  <FaTrash size={14} />
+                </IconButton>
+              )}
             </Box>
           </Box>
         );
@@ -283,47 +305,66 @@ export default function FileTree({
         const { checked, indeterminate } = getFolderCheckboxState(value, selectedFiles, id);
         return (
           <Box key={id} sx={{ pl: depth * 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', py: 0.5 }}>
-              <IconButton
-                size="small"
-                onClick={() => {
-                  console.log('FileTree: Toggling folder expansion for:', id, 'Current expanded:', expandedItems);
-                  setExpandedItems(prev => {
-                    const newExpanded = prev.includes(id) 
-                      ? prev.filter(item => item !== id)
-                      : [...prev, id];
-                    
-                    console.log('FileTree: New expanded state:', newExpanded);
-                    
-                    // Save to localStorage
-                    try {
-                      localStorage.setItem('fileTreeExpanded', JSON.stringify(newExpanded));
-                      console.log('FileTree: Saved to localStorage:', newExpanded);
-                    } catch (e) {
-                      console.warn('Could not save expansion state:', e);
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <IconButton
+                  size="small"
+                  onClick={() => {
+                    console.log('FileTree: Toggling folder expansion for:', id, 'Current expanded:', expandedItems);
+                    setExpandedItems(prev => {
+                      const newExpanded = prev.includes(id) 
+                        ? prev.filter(item => item !== id)
+                        : [...prev, id];
+                      
+                      console.log('FileTree: New expanded state:', newExpanded);
+                      
+                      // Save to localStorage
+                      try {
+                        localStorage.setItem('fileTreeExpanded', JSON.stringify(newExpanded));
+                        console.log('FileTree: Saved to localStorage:', newExpanded);
+                      } catch (e) {
+                        console.warn('Could not save expansion state:', e);
+                      }
+                      
+                      return newExpanded;
+                    });
+                  }}
+                  sx={{ p: 0.5, mr: 0.5 }}
+                >
+                  {isExpanded ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+                </IconButton>
+                <Checkbox
+                  checked={checked}
+                  indeterminate={indeterminate}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    onFolderToggle(value, id);
+                  }}
+                  size="small"
+                  sx={{ p: 0, mr: 1 }}
+                />
+                <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
+                <span style={{ cursor: 'pointer', flex: 1 }}>
+                  {key}
+                </span>
+              </Box>
+              
+              {onDelete && (
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete folder "${key}" and all its contents?`)) {
+                      onDelete(id, 'folder');
                     }
-                    
-                    return newExpanded;
-                  });
-                }}
-                sx={{ p: 0.5, mr: 0.5 }}
-              >
-                {isExpanded ? <ExpandMoreIcon /> : <ChevronRightIcon />}
-              </IconButton>
-              <Checkbox
-                checked={checked}
-                indeterminate={indeterminate}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  onFolderToggle(value, id);
-                }}
-                size="small"
-                sx={{ p: 0, mr: 1 }}
-              />
-              <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
-              <span style={{ cursor: 'pointer', flex: 1 }}>
-                {key}
-              </span>
+                  }}
+                  sx={{ p: 0.5, ml: 1 }}
+                  title="Delete folder and all contents"
+                >
+                  <FaTrash size={14} />
+                </IconButton>
+              )}
             </Box>
             <Collapse in={isExpanded}>
               {childElements}
@@ -392,6 +433,8 @@ export default function FileTree({
           <span>Selected: {selectedCount} files</span>
         </Box>
       </Box>
+      
+
     </Box>
   );
 }
