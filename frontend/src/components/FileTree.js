@@ -1,6 +1,5 @@
 import React from 'react';
-import { SimpleTreeView, TreeItem } from '@mui/x-tree-view';
-import { Checkbox, Box } from '@mui/material';
+import { Checkbox, Box, IconButton, Collapse } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaFolder, FaFilePdf } from 'react-icons/fa';
@@ -103,6 +102,31 @@ export default function FileTree({
   maxWidth = 600,
   isTreeData = false // New prop to indicate if files is already tree data
 }) {
+  console.log('FileTree: Component re-rendering with props:', { 
+    filesLength: files?.length, 
+    selectedFilesLength: selectedFiles?.length,
+    height,
+    maxWidth,
+    isTreeData
+  });
+  // State to track which folders are expanded
+  const [expandedItems, setExpandedItems] = React.useState(() => {
+    // Try to restore expansion state from localStorage
+    try {
+      const saved = localStorage.getItem('fileTreeExpanded');
+      console.log('FileTree: Restoring expansion state from localStorage:', saved);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  
+  console.log('FileTree: Current expandedItems state:', expandedItems);
+  
+  // Log when expandedItems changes
+  React.useEffect(() => {
+    console.log('FileTree: expandedItems state changed to:', expandedItems);
+  }, [expandedItems]);
   
   // Build tree data with handlers attached
   const treeData = React.useMemo(() => {
@@ -146,6 +170,51 @@ export default function FileTree({
     return tree;
   }, [files, selectedFiles, onFileToggle, isTreeData]);
   
+  // Auto-expand folders that contain selected files
+  React.useEffect(() => {
+    if (selectedFiles && selectedFiles.length > 0 && treeData) {
+      const foldersToExpand = new Set();
+      
+      const findFoldersForFiles = (node, path = '') => {
+        for (const [key, value] of Object.entries(node)) {
+          if (key.startsWith('__')) continue;
+          
+          if (value && value.__file) {
+            // This is a file, check if it's selected
+            if (selectedFiles.includes(value.__file)) {
+              // Add all parent folders to expansion list
+              const pathParts = path.split('/').filter(Boolean);
+              let currentPath = '';
+              pathParts.forEach(part => {
+                currentPath = currentPath ? `${currentPath}/${part}` : part;
+                foldersToExpand.add(currentPath);
+              });
+            }
+          } else if (value && typeof value === 'object' && !value.__file) {
+            // This is a folder, recursively check
+            const newPath = path ? `${path}/${key}` : key;
+            findFoldersForFiles(value, newPath);
+          }
+        }
+      };
+      
+      findFoldersForFiles(treeData);
+      
+      // Only expand folders that aren't already manually expanded
+      setExpandedItems(prev => {
+        const newExpanded = new Set(prev);
+        foldersToExpand.forEach(folder => {
+          if (!prev.includes(folder)) {
+            newExpanded.add(folder);
+          }
+        });
+        const result = Array.from(newExpanded);
+        console.log('FileTree: Auto-expanding folders, new state:', result);
+        return result;
+      });
+    }
+  }, [selectedFiles, treeData]);
+  
   // Early return if no files or invalid data
   console.log('FileTree: treeData check:', { 
     treeData, 
@@ -166,8 +235,8 @@ export default function FileTree({
   console.log('FileTree: Proceeding to render tree');
 
   // Helper: Recursively render the tree
-  function renderTree(node, path = '') {
-    console.log('renderTree called with:', { node, path, nodeKeys: Object.keys(node || {}) });
+  function renderTree(node, path = '', depth = 0) {
+    console.log('renderTree called with:', { node, path, depth, nodeKeys: Object.keys(node || {}) });
     
     if (!node || typeof node !== 'object') {
       console.log('renderTree: Invalid node, returning null');
@@ -188,31 +257,59 @@ export default function FileTree({
         // File node
         console.log('Rendering file:', key);
         return (
-          <TreeItem key={id} itemId={id} label={
-            <span>
+          <Box key={id} sx={{ pl: (depth + 1) * 3, py: 0.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
               <Checkbox
                 checked={value.selected || false}
                 onChange={() => value.onToggle && value.onToggle(value.__file)}
                 size="small"
                 sx={{ p: 0, mr: 1 }}
               />
-              {getFileIcon(key)}{key}
+              {getFileIcon(key)}
+              <span>{key}</span>
               {renderFileActions && renderFileActions(value.__file)}
-            </span>
-          } />
+            </Box>
+          </Box>
         );
       } else if (value && typeof value === 'object') {
         // Folder node
         console.log('Rendering folder:', key, 'with children:', Object.keys(value));
-        const childElements = renderTree(value, id);
+        const childElements = renderTree(value, id, depth + 1);
         const hasVisibleChildren = childElements && childElements.some(child => child !== null);
+        const isExpanded = expandedItems.includes(id);
         
         console.log('Folder has visible children:', hasVisibleChildren);
         
         const { checked, indeterminate } = getFolderCheckboxState(value, selectedFiles, id);
         return (
-          <TreeItem key={id} itemId={id} label={
-            <span>
+          <Box key={id} sx={{ pl: depth * 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', py: 0.5 }}>
+              <IconButton
+                size="small"
+                onClick={() => {
+                  console.log('FileTree: Toggling folder expansion for:', id, 'Current expanded:', expandedItems);
+                  setExpandedItems(prev => {
+                    const newExpanded = prev.includes(id) 
+                      ? prev.filter(item => item !== id)
+                      : [...prev, id];
+                    
+                    console.log('FileTree: New expanded state:', newExpanded);
+                    
+                    // Save to localStorage
+                    try {
+                      localStorage.setItem('fileTreeExpanded', JSON.stringify(newExpanded));
+                      console.log('FileTree: Saved to localStorage:', newExpanded);
+                    } catch (e) {
+                      console.warn('Could not save expansion state:', e);
+                    }
+                    
+                    return newExpanded;
+                  });
+                }}
+                sx={{ p: 0.5, mr: 0.5 }}
+              >
+                {isExpanded ? <ExpandMoreIcon /> : <ChevronRightIcon />}
+              </IconButton>
               <Checkbox
                 checked={checked}
                 indeterminate={indeterminate}
@@ -221,14 +318,17 @@ export default function FileTree({
                   onFolderToggle(value, id);
                 }}
                 size="small"
-                sx={{ p: 0, mr:1 }}
+                sx={{ p: 0, mr: 1 }}
               />
               <FaFolder color="#f4a261" style={{ marginRight: 8 }} />
-              {key}
-            </span>
-          }>
-            {childElements}
-          </TreeItem>
+              <span style={{ cursor: 'pointer', flex: 1 }}>
+                {key}
+              </span>
+            </Box>
+            <Collapse in={isExpanded}>
+              {childElements}
+            </Collapse>
+          </Box>
         );
       }
       return null;
@@ -238,7 +338,7 @@ export default function FileTree({
     return elements;
   }
 
-  const treeElements = renderTree(treeData);
+  const treeElements = renderTree(treeData, '', 0);
   
   // Calculate total files and selected files
   const totalFiles = files ? files.length : 0;
@@ -246,14 +346,20 @@ export default function FileTree({
   
   return (
     <Box sx={{ height, display: 'flex', flexDirection: 'column' }}>
-      <SimpleTreeView
-        aria-label="file tree"
-        defaultCollapseIcon={<ExpandMoreIcon />}
-        defaultExpandIcon={<ChevronRightIcon />}
-        sx={{ flexGrow: 1, maxWidth, overflowY: 'auto', mb: 1 }}
+      <Box
+        sx={{ 
+          flexGrow: 1, 
+          maxWidth, 
+          overflowY: 'auto', 
+          mb: 1,
+          border: 1,
+          borderColor: 'divider',
+          borderRadius: 1,
+          p: 1
+        }}
       >
         {treeElements}
-      </SimpleTreeView>
+      </Box>
       
       {/* Footer with file statistics */}
       <Box sx={{ 

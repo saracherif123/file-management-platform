@@ -350,6 +350,8 @@ export default function StepWizard() {
         return newSelection;
       });
     }
+    
+    // Note: The folder will stay expanded because we're using expandedItems state in FileTree
   };
 
 

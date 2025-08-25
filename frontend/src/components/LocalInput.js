@@ -68,7 +68,7 @@ export default function LocalInput({
           />
         </Box>
         <Button variant="contained" component="label" disabled={uploading}>
-          Upload Files & Folders
+          Upload 
           <input
             type="file"
             hidden
@@ -99,7 +99,7 @@ export default function LocalInput({
             {isDragOver ? 'Drop files here' : 'Drag and drop files or folders here'}
           </Typography>
           <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
-            Supports multiple files and folder structures
+           
           </Typography>
         </Box>
       </DragDropArea>
