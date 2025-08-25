@@ -28,6 +28,7 @@ public class FileController {
 
     private final FileService fileService;
     private final S3Service s3Service;
+    private final PostgresService postgresService;
 
     // Progress tracking for imports
     public static class ImportProgress {
@@ -40,9 +41,10 @@ public class FileController {
     public static final Map<String, ImportProgress> progressMap = new ConcurrentHashMap<>();
 
     @Autowired
-    public FileController(FileService fileService, S3Service s3Service) {
+    public FileController(FileService fileService, S3Service s3Service, PostgresService postgresService) {
         this.fileService = fileService;
         this.s3Service = s3Service;
+        this.postgresService = postgresService;
     }
 
     // Progress endpoint
@@ -268,6 +270,33 @@ public class FileController {
             }
         } catch (IOException ex) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Could not delete file: " + ex.getMessage());
+        }
+    }
+
+    // PostgreSQL endpoints
+    @PostMapping("/list-postgres")
+    public ResponseEntity<Map<String, Object>> listPostgres(@RequestBody PostgresRequest postgresRequest) {
+        try {
+            Map<String, Object> result = postgresService.listPostgresContents(postgresRequest);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Error: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+
+    @PostMapping("/list-postgres-all-objects")
+    public ResponseEntity<Map<String, Object>> listPostgresAllObjects(@RequestBody PostgresRequest postgresRequest) {
+        try {
+            List<String> allObjects = postgresService.getAllDatabaseObjects(postgresRequest);
+            Map<String, Object> result = new HashMap<>();
+            result.put("files", allObjects);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Error: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
         }
     }
 } 

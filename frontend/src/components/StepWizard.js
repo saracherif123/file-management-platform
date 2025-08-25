@@ -16,6 +16,7 @@ import {
 import { ArrowBack, ArrowForward, CheckCircle } from '@mui/icons-material';
 import S3Input from './S3Input';
 import LocalInput from './LocalInput';
+import PostgresInput from './PostgresInput';
 import FileTree, { buildFileTree } from './FileTree';
 import ProgressBar from './ProgressBar';
 
@@ -39,6 +40,18 @@ export default function StepWizard() {
   });
   const [s3Files, setS3Files] = useState([]);
   const [s3Loading, setS3Loading] = useState(false);
+
+  // PostgreSQL connection state
+  const [postgresConfig, setPostgresConfig] = useState({
+    host: 'localhost',
+    port: 5433,
+    database: 'testdb',
+    username: 'postgres',
+    password: 'test123',
+    schema: ''
+  });
+  const [postgresFiles, setPostgresFiles] = useState([]);
+  const [postgresLoading, setPostgresLoading] = useState(false);
   
   // Local files state
   const [localFiles, setLocalFiles] = useState([]);
@@ -153,6 +166,45 @@ export default function StepWizard() {
       setImportError('Failed to connect to S3: ' + error.message);
     } finally {
       setS3Loading(false);
+    }
+  };
+
+  // Handle PostgreSQL connection
+  const handlePostgresConnect = async () => {
+    setPostgresLoading(true);
+    try {
+      const response = await fetch('http://localhost:8080/rest/list-postgres-all-objects', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(postgresConfig),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Convert PostgreSQL table/view names to file-like objects
+      const fileList = data.files.map(tableName => ({
+        name: tableName.split('.').pop(),
+        webkitRelativePath: tableName,
+        size: 0,
+        type: 'application/sql'
+      }));
+
+      setPostgresFiles(fileList);
+      setActiveStep(STEPS.FILE_SELECTION);
+    } catch (error) {
+      console.error('Failed to connect to PostgreSQL:', error);
+      alert('Failed to connect to PostgreSQL: ' + error.message);
+    } finally {
+      setPostgresLoading(false);
     }
   };
   
@@ -359,19 +411,26 @@ export default function StepWizard() {
     setDataSource('local');
     setS3Config({ accessKey: '', secretKey: '', region: 'eu-central-1', s3Path: '' });
     setS3Files([]);
+    setPostgresConfig({ host: 'localhost', port: 5433, database: 'testdb', username: 'postgres', password: 'test123', schema: '' });
+    setPostgresFiles([]);
     setLocalFiles([]);
     setSelectedFiles([]);
     setImportProgress({ jobId: null, progress: 0, isImporting: false, message: '' });
     setImportError('');
   };
   
-  // Get current files based on data source - treat both the same way
+  // Get current files based on data source - treat all the same way
   const getCurrentFiles = () => {
-    if (dataSource === 's3') {
-      return s3Files || [];
+    switch (dataSource) {
+      case 'local':
+        return localFiles || [];
+      case 's3':
+        return s3Files || [];
+      case 'postgres':
+        return postgresFiles || [];
+      default:
+        return [];
     }
-    
-    return localFiles || [];
   };
   
   // Filter files based on type and search - identical for both data sources
@@ -456,6 +515,15 @@ export default function StepWizard() {
                 >
                   Amazon S3
                 </Button>
+
+                <Button
+                  variant={dataSource === 'postgres' ? 'contained' : 'outlined'}
+                  onClick={() => handleDataSourceChange('postgres')}
+                  sx={{ flex: 1 }}
+                  size="large"
+                >
+                  PostgreSQL
+                </Button>
               </Box>
               
               {dataSource === 'local' && (
@@ -520,6 +588,17 @@ export default function StepWizard() {
                   />
                 </Box>
               )}
+
+              {dataSource === 'postgres' && (
+                <Box mt={3}>
+                  <PostgresInput
+                    config={postgresConfig}
+                    onConfigChange={setPostgresConfig}
+                    onConnect={handlePostgresConnect}
+                    loading={postgresLoading}
+                  />
+                </Box>
+              )}
               
               {importError && (
                 <Alert severity="error" sx={{ mt: 2 }}>
@@ -539,7 +618,7 @@ export default function StepWizard() {
               </Typography>
               
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                {dataSource === 's3' ? 'S3' : 'Local'} Files: {getCurrentFiles().length} available
+                {dataSource === 's3' ? 'S3' : dataSource === 'postgres' ? 'PostgreSQL' : 'Local'} Files: {getCurrentFiles().length} available
               </Typography>
               
               <Box sx={{ mb: 2 }}>
