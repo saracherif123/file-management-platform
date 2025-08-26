@@ -11,9 +11,14 @@ import {
   CardContent,
   CardActions,
   Stack,
-  Alert
+  Alert,
+  FormControl,
+  Select,
+  MenuItem,
+  InputLabel,
+  InputBase
 } from '@mui/material';
-import { ArrowBack, ArrowForward, CheckCircle, Upload as UploadIcon } from '@mui/icons-material';
+import { ArrowBack, ArrowForward, CheckCircle, Upload as UploadIcon, Search as SearchIcon } from '@mui/icons-material';
 import S3Input from './S3Input';
 import LocalInput from './LocalInput';
 import PostgresInput from './PostgresInput';
@@ -818,32 +823,33 @@ export default function StepWizard() {
               
               <Box sx={{ mb: 2 }}>
                 <Stack direction="row" spacing={2} alignItems="center">
-                  <select
-                    value={fileType}
-                    onChange={e => setFileType(e.target.value)}
-                    style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-                  >
-                    <option value="All">All Files</option>
-                    <option value="csv">CSV</option>
-                    <option value="json">JSON</option>
-                    <option value="parquet">Parquet</option>
-                    <option value="pdf">PDF</option>
-                    <option value="txt">Text</option>
-                    <option value="sql">SQL</option>
-                  </select>
+                  <FormControl size="small" sx={{ minWidth: 100 }}>
+                    <InputLabel id="file-type-label">Type</InputLabel>
+                    <Select
+                      labelId="file-type-label"
+                      value={fileType}
+                      label="Type"
+                      onChange={e => setFileType(e.target.value)}
+                    >
+                      <MenuItem value="All">All Files</MenuItem>
+                      <MenuItem value="csv">CSV</MenuItem>
+                      <MenuItem value="json">JSON</MenuItem>
+                      <MenuItem value="parquet">Parquet</MenuItem>
+                      <MenuItem value="pdf">PDF</MenuItem>
+                      <MenuItem value="txt">Text</MenuItem>
+                      <MenuItem value="sql">SQL</MenuItem>
+                    </Select>
+                  </FormControl>
                   
-                  <input
-                    type="text"
-                    placeholder="Search files..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    style={{ 
-                      padding: '8px', 
-                      borderRadius: '4px', 
-                      border: '1px solid #ccc',
-                      flex: 1 
-                    }}
-                  />
+                  <Box sx={{ flex: 1 }}>
+                    <InputBase
+                      placeholder="Search files..."
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      startAdornment={<SearchIcon sx={{ mr: 1 }} />}
+                      sx={{ width: '100%', border: 1, borderColor: 'divider', borderRadius: 1, px: 1, py: 0.5 }}
+                    />
+                  </Box>
                   
                   <Button
                     variant="outlined"
