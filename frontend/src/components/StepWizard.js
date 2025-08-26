@@ -91,6 +91,13 @@ export default function StepWizard() {
     setSelectedFiles([]);
   };
   
+  // Handle going back while preserving selected files
+  const handleGoBack = () => {
+    console.log('Going back, preserving selected files:', selectedFiles.length);
+    setActiveStep(STEPS.CONNECTION);
+    // Note: We don't clear selectedFiles here, so they're preserved
+  };
+  
   // Handle S3 connection
   const handleS3Connect = async () => {
     setS3Loading(true);
@@ -849,6 +856,16 @@ export default function StepWizard() {
             <CardContent sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
                 Select Files to Import
+                {selectedFiles.length > 0 && (
+                  <Typography 
+                    component="span" 
+                    variant="body2" 
+                    color="primary" 
+                    sx={{ ml: 2, fontWeight: 'normal' }}
+                  >
+                    ({selectedFiles.length} files selected)
+                  </Typography>
+                )}
               </Typography>
               
               {/* Show PostgreSQL error if any */}
@@ -1129,7 +1146,7 @@ export default function StepWizard() {
             </CardContent>
             
             <CardActions>
-              <Button onClick={() => setActiveStep(STEPS.CONNECTION)}>
+              <Button onClick={handleGoBack}>
                 <ArrowBack /> Back
               </Button>
               <Button

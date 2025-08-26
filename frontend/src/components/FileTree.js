@@ -6,58 +6,25 @@ import { FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaFolder, FaFilePdf, FaTrash,
 import TablePreviewDialog from './TablePreviewDialog';
 
 // Helper function to get file icon
-function getFileIcon(filename) {
-  console.log('getFileIcon called with filename:', filename);
-  
-  // File extensions - check these FIRST before PostgreSQL objects
-  if (filename.endsWith('.csv')) {
-    console.log('Returning CSV icon for:', filename);
-    return <FaFileCsv color="#2a9d8f" style={{ marginRight: 8 }} />;
-  }
-  if (filename.endsWith('.json')) {
-    console.log('Returning JSON icon for:', filename);
-    return <FaFileCode color="#e76f51" style={{ marginRight: 8 }} />;
-  }
-  if (filename.endsWith('.parquet')) {
-    console.log('Returning Parquet icon for:', filename);
-    return <FaFileAlt color="#264653" style={{ marginRight: 8 }} />;
-  }
-  if (filename.endsWith('.pdf')) {
-    console.log('Returning PDF icon for:', filename);
-    return <FaFilePdf color="#e74c3c" style={{ marginRight: 8 }} />;
-  }
-  if (filename.endsWith('.txt')) {
-    console.log('Returning TXT icon for:', filename);
-    return <FaFileAlt color="#6d6875" style={{ marginRight: 8 }} />;
-  }
-  if (filename.endsWith('.sql')) {
-    console.log('Returning SQL icon for:', filename);
-    return <FaFileCode color="#f4a261" style={{ marginRight: 8 }} />;
+function getFileIcon(filename, isPostgresTable = false) {
+  // PostgreSQL tables
+  if (isPostgresTable) {
+    return <FaTable color="#336791" style={{ marginRight: 8 }} />;
   }
   
-  // PostgreSQL objects (schema.table format) - check this AFTER file extensions
-  // Only treat as PostgreSQL if it has a dot but NO file extension
-  if (filename.includes('.') && !filename.includes('/')) {
-    // Check if it's NOT a file with extension (like .csv, .json, etc.)
-    const hasFileExtension = ['.csv', '.json', '.parquet', '.pdf', '.txt', '.sql'].some(ext => 
-      filename.toLowerCase().endsWith(ext)
-    );
-    
-    if (!hasFileExtension) {
-      console.log('Returning PostgreSQL table icon for:', filename);
-      return <FaTable color="#336791" style={{ marginRight: 8 }} />;
-    }
-  }
+  // File extensions
+  if (filename.endsWith('.csv')) return <FaFileCsv color="#2a9d8f" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.json')) return <FaFileCode color="#e76f51" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.parquet')) return <FaFileAlt color="#264653" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.pdf')) return <FaFilePdf color="#e74c3c" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.txt')) return <FaFileAlt color="#6d6875" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.sql')) return <FaFileCode color="#f4a261" style={{ marginRight: 8 }} />;
   
-  // Base case: if no specific icon matches and not PostgreSQL, use default file icon
-  console.log('No specific icon match found, returning default file icon for:', filename);
   return <FaFile style={{ marginRight: 8 }} />;
 }
 
 // Helper function to get folder icon (for PostgreSQL schemas)
 function getFolderIcon(folderName, files) {
-  console.log('getFolderIcon called with folderName:', folderName, 'and files:', files);
-  
   // Check if this folder contains PostgreSQL objects (schema.table format)
   const hasPostgresObjects = files.some(file => {
     const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
@@ -65,16 +32,14 @@ function getFolderIcon(folderName, files) {
   });
   
   if (hasPostgresObjects) {
-    console.log('Returning PostgreSQL database icon for folder:', folderName);
     return <FaDatabase color="#336791" style={{ marginRight: 8 }} />;
   }
   
-  console.log('Returning default folder icon for folder:', folderName);
   return <FaFolder color="#f4a261" style={{ marginRight: 8 }} />;
 }
 
 // Helper: Build a tree from file paths
-function buildFileTree(files) {
+function buildFileTree(files, dataSource = 'local') {
   if (!files || !Array.isArray(files)) {
     console.warn('buildFileTree: files parameter is not a valid array:', files);
     return {};
@@ -89,33 +54,62 @@ function buildFileTree(files) {
   })));
   
   const root = {};
-  for (const file of files) {
-    if (!file) continue; // Skip null/undefined files
-    
-    const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
-    if (!path) continue; // Skip files without valid paths
-    
-    console.log('buildFileTree: Processing path:', path);
-    const parts = path.split('/');
-    console.log('buildFileTree: Path parts:', parts);
-    
-    let current = root;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      console.log(`buildFileTree: Creating/accessing part ${i}: "${part}"`);
+  
+  if (dataSource === 'postgres') {
+    // Special handling for PostgreSQL: group by schema
+    for (const file of files) {
+      if (!file) continue;
       
-      if (!current[part]) {
-        if (i === parts.length - 1) {
-          // Last part - this is the file
-          current[part] = { __file: path };
-          console.log(`buildFileTree: Created file node for "${part}"`);
-        } else {
-          // Intermediate part - this is a folder
-          current[part] = {};
-          console.log(`buildFileTree: Created folder node for "${part}"`);
+      const tableName = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
+      if (!tableName) continue;
+      
+      // Check if this is a schema.table format
+      if (tableName.includes('.') && !tableName.includes('/')) {
+        const [schema, table] = tableName.split('.');
+        
+        // Create schema folder if it doesn't exist
+        if (!root[schema]) {
+          root[schema] = {};
         }
+        
+        // Add table as a file within the schema
+        root[schema][table] = { __file: tableName };
+        console.log(`buildFileTree: Added table "${table}" to schema "${schema}"`);
+      } else {
+        // Fallback for non-schema.table format
+        root[tableName] = { __file: tableName };
       }
-      current = current[part];
+    }
+  } else {
+    // Original logic for local files
+    for (const file of files) {
+      if (!file) continue; // Skip null/undefined files
+      
+      const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
+      if (!path) continue; // Skip files without valid paths
+      
+      console.log('buildFileTree: Processing path:', path);
+      const parts = path.split('/');
+      console.log('buildFileTree: Path parts:', parts);
+      
+      let current = root;
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        console.log(`buildFileTree: Creating/accessing part ${i}: "${part}"`);
+        
+        if (!current[part]) {
+          if (i === parts.length - 1) {
+            // Last part - this is the file
+            current[part] = { __file: path };
+            console.log(`buildFileTree: Created file node for "${part}"`);
+          } else {
+            // Intermediate part - this is a folder
+            current[part] = {};
+            console.log(`buildFileTree: Created folder node for "${part}"`);
+          }
+        }
+        current = current[part];
+      }
     }
   }
   
@@ -249,7 +243,7 @@ export default function FileTree({
       if (!Array.isArray(files)) {
         return {};
       }
-      tree = buildFileTree(files);
+      tree = buildFileTree(files, dataSource);
     }
     
     // Only attach handlers if we have a valid tree
@@ -274,6 +268,26 @@ export default function FileTree({
     return tree;
   }, [files, selectedFiles, onFileToggle, isTreeData]);
   
+  // Auto-expand PostgreSQL schema folders by default
+  React.useEffect(() => {
+    if (dataSource === 'postgres' && treeData && Object.keys(treeData).length > 0) {
+      // Get all top-level folders (schemas) and expand them by default
+      const schemasToExpand = Object.keys(treeData).filter(key => 
+        treeData[key] && typeof treeData[key] === 'object' && !treeData[key].__file
+      );
+      
+      setExpandedItems(prev => {
+        const newExpanded = new Set(prev);
+        schemasToExpand.forEach(schema => {
+          newExpanded.add(schema);
+        });
+        const result = Array.from(newExpanded);
+        console.log('FileTree: Auto-expanding PostgreSQL schemas:', result);
+        return result;
+      });
+    }
+  }, [dataSource, treeData]);
+
   // Auto-expand folders that contain selected files
   React.useEffect(() => {
     if (selectedFiles && selectedFiles.length > 0 && treeData) {
@@ -331,15 +345,7 @@ export default function FileTree({
     console.log('FileTree: Early return triggered');
     return (
       <Box sx={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.secondary' }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <FaFileCsv color="#2a9d8f" />
-            <FaFileAlt color="#264653" />
-            <FaFileCode color="#e76f51" />
-            <FaFile color="#6d6875" />
-          </Box>
-          <span>No files to display</span>
-        </Box>
+        No files to display
       </Box>
     );
   }
@@ -378,17 +384,15 @@ export default function FileTree({
                   size="small"
                   sx={{ p: 0, mr: 1 }}
                 />
-                <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
-                  {getFileIcon(key)}
-                </Box>
+                {getFileIcon(key, dataSource === 'postgres' && value.__file && value.__file.includes('.'))}
                 <span 
                   style={{ 
-                    cursor: dataSource === 'postgres' && key.includes('.') ? 'pointer' : 'default',
-                    textDecoration: dataSource === 'postgres' && key.includes('.') ? 'underline' : 'none'
+                    cursor: dataSource === 'postgres' && value.__file && value.__file.includes('.') ? 'pointer' : 'default',
+                    textDecoration: dataSource === 'postgres' && value.__file && value.__file.includes('.') ? 'underline' : 'none'
                   }}
                   onClick={() => {
-                    if (dataSource === 'postgres' && key.includes('.') && !key.includes('/')) {
-                      handleTablePreview(key);
+                    if (dataSource === 'postgres' && value.__file && value.__file.includes('.') && !value.__file.includes('/')) {
+                      handleTablePreview(value.__file);
                     }
                   }}
                 >
@@ -410,7 +414,7 @@ export default function FileTree({
                   sx={{ p: 0.5, ml: 1 }}
                   title="Delete file"
                 >
-                  <FaTrash size={14} />
+                  <FaTrash size={14} color="#666666" />
                 </IconButton>
               )}
             </Box>
@@ -466,9 +470,7 @@ export default function FileTree({
                   size="small"
                   sx={{ p: 0, mr: 1 }}
                 />
-                <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
-                  {getFolderIcon(key, files)}
-                </Box>
+                {getFolderIcon(key, files)}
                 <span style={{ cursor: 'pointer', flex: 1 }}>
                   {key}
                 </span>
@@ -487,7 +489,7 @@ export default function FileTree({
                   sx={{ p: 0.5, ml: 1 }}
                   title="Delete folder and all contents"
                 >
-                  <FaTrash size={14} />
+                  <FaTrash size={14} color="#666666" />
                 </IconButton>
               )}
             </Box>
