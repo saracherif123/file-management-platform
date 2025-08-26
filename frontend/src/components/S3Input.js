@@ -8,7 +8,9 @@ import {
   InputLabel, 
   Button, 
   IconButton, 
-  InputAdornment 
+  InputAdornment,
+  Box,
+  Typography
 } from '@mui/material';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
@@ -29,6 +31,16 @@ export default function S3Input({
 
   return (
     <Stack spacing={2} sx={{ flex: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <img 
+          src="/s3.png" 
+          alt="S3 Logo" 
+          width="24" 
+          height="24"
+        />
+        <Typography variant="h6">Amazon S3 Connection</Typography>
+      </Box>
+      
       {/* First row: Access Key and Secret Key */}
       <Stack direction="row" spacing={2} alignItems="center">
         <TextField

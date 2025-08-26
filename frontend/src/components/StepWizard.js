@@ -365,26 +365,75 @@ export default function StepWizard() {
   const handleDelete = (itemPath, itemType) => {
     console.log('Deleting:', itemType, itemPath);
     
-    if (itemType === 'file') {
-      // Remove file from localFiles and selectedFiles
-      setLocalFiles(prev => prev.filter(file => {
-        const filePath = file.webkitRelativePath || file.name;
-        return filePath !== itemPath;
-      }));
-      
-      setSelectedFiles(prev => prev.filter(filePath => filePath !== itemPath));
-    } else if (itemType === 'folder') {
-      // Remove all files in the folder from localFiles and selectedFiles
-      const folderPath = itemPath;
-      
-      setLocalFiles(prev => prev.filter(file => {
-        const filePath = file.webkitRelativePath || file.name;
-        return !filePath.startsWith(folderPath + '/') && filePath !== folderPath;
-      }));
-      
-      setSelectedFiles(prev => prev.filter(filePath => 
-        !filePath.startsWith(folderPath + '/') && filePath !== folderPath
-      ));
+    if (dataSource === 'postgres') {
+      // Handle PostgreSQL object deletion
+      if (itemType === 'file') {
+        // Remove table/view from postgresFiles and selectedFiles
+        setPostgresFiles(prev => prev.filter(file => {
+          const filePath = file.webkitRelativePath || file.name;
+          return filePath !== itemPath;
+        }));
+        
+        setSelectedFiles(prev => prev.filter(filePath => filePath !== itemPath));
+      } else if (itemType === 'folder') {
+        // Remove all objects in the schema from postgresFiles and selectedFiles
+        const schemaName = itemPath;
+        
+        setPostgresFiles(prev => prev.filter(file => {
+          const filePath = file.webkitRelativePath || file.name;
+          return !filePath.startsWith(schemaName + '.') && filePath !== schemaName;
+        }));
+        
+        setSelectedFiles(prev => prev.filter(filePath => 
+          !filePath.startsWith(schemaName + '.') && filePath !== schemaName
+        ));
+      }
+    } else if (dataSource === 's3') {
+      // Handle S3 file deletion
+      if (itemType === 'file') {
+        // Remove file from s3Files and selectedFiles
+        setS3Files(prev => prev.filter(file => {
+          const filePath = file.webkitRelativePath || file.name;
+          return filePath !== itemPath;
+        }));
+        
+        setSelectedFiles(prev => prev.filter(filePath => filePath !== itemPath));
+      } else if (itemType === 'folder') {
+        // Remove all files in the folder from s3Files and selectedFiles
+        const folderPath = itemPath;
+        
+        setS3Files(prev => prev.filter(file => {
+          const filePath = file.webkitRelativePath || file.name;
+          return !filePath.startsWith(folderPath + '/') && filePath !== folderPath;
+        }));
+        
+        setSelectedFiles(prev => prev.filter(filePath => 
+          !filePath.startsWith(folderPath + '/') && filePath !== folderPath
+        ));
+      }
+    } else {
+      // Handle local file deletion (existing logic)
+      if (itemType === 'file') {
+        // Remove file from localFiles and selectedFiles
+        setLocalFiles(prev => prev.filter(file => {
+          const filePath = file.webkitRelativePath || file.name;
+          return filePath !== itemPath;
+        }));
+        
+        setSelectedFiles(prev => prev.filter(filePath => filePath !== itemPath));
+      } else if (itemType === 'folder') {
+        // Remove all files in the folder from localFiles and selectedFiles
+        const folderPath = itemPath;
+        
+        setLocalFiles(prev => prev.filter(file => {
+          const filePath = file.webkitRelativePath || file.name;
+          return !filePath.startsWith(folderPath + '/') && filePath !== folderPath;
+        }));
+        
+        setSelectedFiles(prev => prev.filter(filePath => 
+          !filePath.startsWith(folderPath + '/') && filePath !== folderPath
+        ));
+      }
     }
   };
   
@@ -615,6 +664,17 @@ export default function StepWizard() {
                   onClick={() => handleDataSourceChange('local')}
                   sx={{ flex: 1 }}
                   size="large"
+                  startIcon={
+                    <svg 
+                      width="20" 
+                      height="20" 
+                      viewBox="0 0 24 24" 
+                      fill="currentColor"
+                      style={{ marginRight: 8 }}
+                    >
+                      <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                    </svg>
+                  }
                 >
                   Local Files
                 </Button>
@@ -624,6 +684,14 @@ export default function StepWizard() {
                   onClick={() => handleDataSourceChange('s3')}
                   sx={{ flex: 1 }}
                   size="large"
+                  startIcon={
+                    <img 
+                      src="/s3.png" 
+                      alt="S3 Logo" 
+                      width="20" 
+                      height="20"
+                    />
+                  }
                 >
                   Amazon S3
                 </Button>

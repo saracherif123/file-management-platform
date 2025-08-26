@@ -144,7 +144,7 @@ public class PostgresService {
                 "AND table_name NOT LIKE 'sql_%' " +
                 "AND table_name NOT LIKE 'temp%' " +
                 "AND table_name NOT LIKE 'tmp%' " +
-                "AND table_name NOT IN ('schema_migrations', 'ar_internal_metadata', 'sessions', 'users', 'pg_stat_statements', 'pg_stat_activity', 'pg_stat_database', 'pg_stat_user_tables', 'pg_stat_user_indexes', 'pg_stat_user_functions') " +
+                "AND table_name NOT IN ('schema_migrations', 'ar_internal_metadata', 'sessions', 'pg_stat_statements', 'pg_stat_activity', 'pg_stat_database', 'pg_stat_user_tables', 'pg_stat_user_indexes', 'pg_stat_user_functions') " +
                 "ORDER BY table_name")) {
             
             stmt.setString(1, schema);
@@ -306,5 +306,48 @@ public class PostgresService {
         }
         
         return result;
+    }
+
+    /**
+     * Drop a database object (table or view)
+     */
+    public boolean dropDatabaseObject(PostgresRequest request, String objectName, String schema) throws SQLException {
+        try (Connection connection = createConnection(request)) {
+            // First check if it's a table or view
+            String checkQuery = "SELECT table_type FROM information_schema.tables WHERE table_schema = ? AND table_name = ?";
+            String objectType = null;
+            
+            try (PreparedStatement stmt = connection.prepareStatement(checkQuery)) {
+                stmt.setString(1, schema);
+                stmt.setString(2, objectName);
+                
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        objectType = rs.getString("table_type");
+                    }
+                }
+            }
+            
+            if (objectType == null) {
+                return false; // Object doesn't exist
+            }
+            
+            // Drop the object
+            String dropQuery;
+            if ("VIEW".equals(objectType)) {
+                dropQuery = "DROP VIEW IF EXISTS " + schema + "." + objectName + " CASCADE";
+            } else {
+                dropQuery = "DROP TABLE IF EXISTS " + schema + "." + objectName + " CASCADE";
+            }
+            
+            try (Statement stmt = connection.createStatement()) {
+                stmt.executeUpdate(dropQuery);
+                return true;
+            }
+            
+        } catch (SQLException e) {
+            System.err.println("Error dropping database object: " + e.getMessage());
+            throw e;
+        }
     }
 }

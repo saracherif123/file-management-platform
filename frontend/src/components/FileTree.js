@@ -359,7 +359,7 @@ export default function FileTree({
                   color="error"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (window.confirm(`Delete file "${key}"?`)) {
+                    if (window.confirm(`Delete "${key}"?`)) {
                       onDelete(value.__file, 'file');
                     }
                   }}
@@ -434,7 +434,7 @@ export default function FileTree({
                   color="error"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (window.confirm(`Delete folder "${key}" and all its contents?`)) {
+                    if (window.confirm(`Delete "${key}" and all its contents?`)) {
                       onDelete(id, 'folder');
                     }
                   }}

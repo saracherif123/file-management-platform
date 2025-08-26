@@ -359,4 +359,43 @@ public class FileController {
             return ResponseEntity.status(500).body(error);
         }
     }
+
+    @DeleteMapping("/postgres-drop-object")
+    public ResponseEntity<Map<String, Object>> dropPostgresObject(@RequestBody PostgresRequest postgresRequest) {
+        try {
+            String objectName = postgresRequest.getTable();
+            if (objectName == null || objectName.isEmpty()) {
+                Map<String, Object> error = new HashMap<>();
+                error.put("error", "Object name is required");
+                return ResponseEntity.badRequest().body(error);
+            }
+
+            // Extract schema and object name from schema.object format
+            String schema = "public"; // Default schema
+            String actualObjectName = objectName;
+            if (objectName.contains(".")) {
+                String[] parts = objectName.split("\\.");
+                if (parts.length == 2) {
+                    schema = parts[0];
+                    actualObjectName = parts[1];
+                }
+            }
+
+            boolean dropped = postgresService.dropDatabaseObject(postgresRequest, actualObjectName, schema);
+            
+            Map<String, Object> result = new HashMap<>();
+            if (dropped) {
+                result.put("message", "Object dropped successfully");
+                result.put("object", objectName);
+            } else {
+                result.put("error", "Failed to drop object");
+            }
+            
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("error", "Failed to drop object: " + e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
 } 
