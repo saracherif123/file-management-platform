@@ -2,7 +2,8 @@
 
 A modern, full-stack file management platform with a Java Spring Boot backend and a React + Material UI frontend. Features unified handling of local files, Amazon S3 storage, and PostgreSQL databases with an intuitive wizard-based interface.
 
-https://github.com/user-attachments/assets/ce8e35ba-cef1-493b-be26-05a818881e4a
+https://github.com/user-attachments/assets/f1edb475-9ea2-4de6-9fa7-ef8736511584
+
 
 ## Getting Started
 
