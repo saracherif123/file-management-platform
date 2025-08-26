@@ -12,6 +12,7 @@ import {
   Typography
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { styled } from '@mui/material/styles';
 
 const DragDropArea = styled(Box)(({ theme, isdragover }) => ({
@@ -45,14 +46,7 @@ export default function LocalInput({
   return (
     <Stack spacing={2}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <svg 
-          width="24" 
-          height="24" 
-          viewBox="0 0 24 24" 
-          fill="currentColor"
-        >
-          <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
-        </svg>
+        <UploadFileIcon color="primary" />
         <Typography variant="h6">Local Files Upload</Typography>
       </Box>
       
@@ -80,6 +74,7 @@ export default function LocalInput({
           />
         </Box>
         <Button variant="contained" component="label" disabled={uploading}>
+          <UploadFileIcon sx={{ mr: 1, fontSize: 20 }} />
           Upload 
           <input
             type="file"
@@ -106,14 +101,9 @@ export default function LocalInput({
           transition: 'all 0.2s ease-in-out'
         }}
       >
-        <Box textAlign="center">
-          <Typography variant="body2" color="text.secondary">
-            {isDragOver ? 'Drop files here' : 'Drag and drop files or folders here'}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
-           
-          </Typography>
-        </Box>
+        <Typography variant="h6" color="primary" gutterBottom>
+          Drag & Drop Files and Folders Here
+        </Typography>
       </DragDropArea>
     </Stack>
   );

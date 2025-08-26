@@ -7,25 +7,57 @@ import TablePreviewDialog from './TablePreviewDialog';
 
 // Helper function to get file icon
 function getFileIcon(filename) {
-  // PostgreSQL objects (schema.table format)
-  if (filename.includes('.') && !filename.includes('/')) {
-    // This is likely a PostgreSQL object (schema.table)
-    return <FaTable color="#336791" style={{ marginRight: 8 }} />;
+  console.log('getFileIcon called with filename:', filename);
+  
+  // File extensions - check these FIRST before PostgreSQL objects
+  if (filename.endsWith('.csv')) {
+    console.log('Returning CSV icon for:', filename);
+    return <FaFileCsv color="#2a9d8f" style={{ marginRight: 8 }} />;
+  }
+  if (filename.endsWith('.json')) {
+    console.log('Returning JSON icon for:', filename);
+    return <FaFileCode color="#e76f51" style={{ marginRight: 8 }} />;
+  }
+  if (filename.endsWith('.parquet')) {
+    console.log('Returning Parquet icon for:', filename);
+    return <FaFileAlt color="#264653" style={{ marginRight: 8 }} />;
+  }
+  if (filename.endsWith('.pdf')) {
+    console.log('Returning PDF icon for:', filename);
+    return <FaFilePdf color="#e74c3c" style={{ marginRight: 8 }} />;
+  }
+  if (filename.endsWith('.txt')) {
+    console.log('Returning TXT icon for:', filename);
+    return <FaFileAlt color="#6d6875" style={{ marginRight: 8 }} />;
+  }
+  if (filename.endsWith('.sql')) {
+    console.log('Returning SQL icon for:', filename);
+    return <FaFileCode color="#f4a261" style={{ marginRight: 8 }} />;
   }
   
-  // File extensions
-  if (filename.endsWith('.csv')) return <FaFileCsv color="#2a9d8f" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.json')) return <FaFileCode color="#e76f51" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.parquet')) return <FaFileAlt color="#264653" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.pdf')) return <FaFilePdf color="#e74c3c" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.txt')) return <FaFileAlt color="#6d6875" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.sql')) return <FaFileCode color="#f4a261" style={{ marginRight: 8 }} />;
+  // PostgreSQL objects (schema.table format) - check this AFTER file extensions
+  // Only treat as PostgreSQL if it has a dot but NO file extension
+  if (filename.includes('.') && !filename.includes('/')) {
+    // Check if it's NOT a file with extension (like .csv, .json, etc.)
+    const hasFileExtension = ['.csv', '.json', '.parquet', '.pdf', '.txt', '.sql'].some(ext => 
+      filename.toLowerCase().endsWith(ext)
+    );
+    
+    if (!hasFileExtension) {
+      console.log('Returning PostgreSQL table icon for:', filename);
+      return <FaTable color="#336791" style={{ marginRight: 8 }} />;
+    }
+  }
   
+  // Base case: if no specific icon matches and not PostgreSQL, use default file icon
+  console.log('No specific icon match found, returning default file icon for:', filename);
   return <FaFile style={{ marginRight: 8 }} />;
 }
 
 // Helper function to get folder icon (for PostgreSQL schemas)
 function getFolderIcon(folderName, files) {
+  console.log('getFolderIcon called with folderName:', folderName, 'and files:', files);
+  
   // Check if this folder contains PostgreSQL objects (schema.table format)
   const hasPostgresObjects = files.some(file => {
     const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
@@ -33,9 +65,11 @@ function getFolderIcon(folderName, files) {
   });
   
   if (hasPostgresObjects) {
+    console.log('Returning PostgreSQL database icon for folder:', folderName);
     return <FaDatabase color="#336791" style={{ marginRight: 8 }} />;
   }
   
+  console.log('Returning default folder icon for folder:', folderName);
   return <FaFolder color="#f4a261" style={{ marginRight: 8 }} />;
 }
 
@@ -297,7 +331,15 @@ export default function FileTree({
     console.log('FileTree: Early return triggered');
     return (
       <Box sx={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.secondary' }}>
-        No files to display
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FaFileCsv color="#2a9d8f" />
+            <FaFileAlt color="#264653" />
+            <FaFileCode color="#e76f51" />
+            <FaFile color="#6d6875" />
+          </Box>
+          <span>No files to display</span>
+        </Box>
       </Box>
     );
   }
@@ -336,7 +378,9 @@ export default function FileTree({
                   size="small"
                   sx={{ p: 0, mr: 1 }}
                 />
-                {getFileIcon(key)}
+                <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
+                  {getFileIcon(key)}
+                </Box>
                 <span 
                   style={{ 
                     cursor: dataSource === 'postgres' && key.includes('.') ? 'pointer' : 'default',
@@ -422,7 +466,9 @@ export default function FileTree({
                   size="small"
                   sx={{ p: 0, mr: 1 }}
                 />
-                {getFolderIcon(key, files)}
+                <Box sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
+                  {getFolderIcon(key, files)}
+                </Box>
                 <span style={{ cursor: 'pointer', flex: 1 }}>
                   {key}
                 </span>

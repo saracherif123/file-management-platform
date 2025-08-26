@@ -24,6 +24,7 @@ import LocalInput from './LocalInput';
 import PostgresInput from './PostgresInput';
 import FileTree, { buildFileTree } from './FileTree';
 import ProgressBar from './ProgressBar';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 const STEPS = {
   CONNECTION: 0,
@@ -78,6 +79,9 @@ export default function StepWizard() {
     message: '' 
   });
   const [importError, setImportError] = useState('');
+  
+  // Drag and drop message visibility state
+  const [showDragMessage, setShowDragMessage] = useState(false);
   
   // Handle data source selection
   const handleDataSourceChange = (source) => {
@@ -332,19 +336,29 @@ export default function StepWizard() {
       // Append new files to existing ones
       console.log('Appending', files.length, 'new files to existing', localFiles.length, 'files');
       const combinedFiles = [...localFiles, ...files];
+      console.log('Combined files:', combinedFiles.length);
+      console.log('Sample combined files:', combinedFiles.slice(0, 3).map(f => ({
+        name: f.name,
+        webkitRelativePath: f.webkitRelativePath,
+        hasPath: !!f.webkitRelativePath
+      })));
+      console.log('About to set localFiles to:', combinedFiles.length, 'files');
       setLocalFiles(combinedFiles);
+      console.log('localFiles state updated');
       
-        // Auto-select only the new files
-        const newFilePaths = files.map(f => f.webkitRelativePath || f.name);
-        setSelectedFiles(prev => {
-          const newSelection = [...prev];
-          newFilePaths.forEach(filePath => {
-            if (!newSelection.includes(filePath)) {
-              newSelection.push(filePath);
-            }
-          });
-          return newSelection;
+      // Auto-select only the new files
+      const newFilePaths = files.map(f => f.webkitRelativePath || f.name);
+      console.log('New file paths to select:', newFilePaths);
+      setSelectedFiles(prev => {
+        const newSelection = [...prev];
+        newFilePaths.forEach(filePath => {
+          if (!newSelection.includes(filePath)) {
+            newSelection.push(filePath);
+          }
         });
+        console.log('Updated selected files:', newSelection);
+        return newSelection;
+      });
     } else {
       // First upload - replace all files
       console.log('Setting localFiles and advancing to step 2');
@@ -575,16 +589,29 @@ export default function StepWizard() {
   
   // Get current files based on data source - treat all the same way
   const getCurrentFiles = () => {
-    switch (dataSource) {
-      case 'local':
-        return localFiles || [];
-      case 's3':
-        return s3Files || [];
-      case 'postgres':
-        return postgresFiles || [];
-      default:
-        return [];
+    const files = (() => {
+      switch (dataSource) {
+        case 'local':
+          return localFiles || [];
+        case 's3':
+          return s3Files || [];
+        case 'postgres':
+          return postgresFiles || [];
+        default:
+          return [];
+      }
+    })();
+    
+    console.log('getCurrentFiles: dataSource =', dataSource, 'returning', files.length, 'files');
+    if (dataSource === 'local') {
+      console.log('Sample local files:', files.slice(0, 3).map(f => ({
+        name: f?.name,
+        webkitRelativePath: f?.webkitRelativePath,
+        hasPath: !!f?.webkitRelativePath
+      })));
     }
+    
+    return files;
   };
   
   // Filter files based on type and search - identical for both data sources
@@ -594,6 +621,13 @@ export default function StepWizard() {
     if (!Array.isArray(files) || files.length === 0) {
       return [];
     }
+    
+    console.log('getFilteredFiles: Processing', files.length, 'files');
+    console.log('Sample files before filtering:', files.slice(0, 3).map(f => ({
+      name: f?.name,
+      webkitRelativePath: f?.webkitRelativePath,
+      hasPath: !!f?.webkitRelativePath
+    })));
     
     // Apply filtering to files - same logic for both local and S3
     const filtered = files.filter(f => {
@@ -615,6 +649,13 @@ export default function StepWizard() {
       return matchesType && matchesSearch;
     });
     
+    console.log('getFilteredFiles: After filtering,', filtered.length, 'files remain');
+    console.log('Sample files after filtering:', filtered.slice(0, 3).map(f => ({
+      name: f?.name,
+      webkitRelativePath: f?.webkitRelativePath,
+      hasPath: !!f?.webkitRelativePath
+    })));
+    
     return filtered;
   };
   
@@ -631,10 +672,18 @@ export default function StepWizard() {
     }
     
     console.log('Building tree from filteredFiles:', filteredFiles);
+    console.log('Sample filtered files:', filteredFiles.slice(0, 3).map(f => ({
+      name: f?.name,
+      webkitRelativePath: f?.webkitRelativePath,
+      hasPath: !!f?.webkitRelativePath,
+      pathIncludesSlash: f?.webkitRelativePath?.includes('/')
+    })));
     
     // Use the proper buildFileTree function to create hierarchical structure
+    console.log('About to call buildFileTree with', filteredFiles.length, 'files');
     const tree = buildFileTree(filteredFiles);
     console.log('buildFileTree result:', tree);
+    console.log('Tree root keys:', Object.keys(tree));
     
     // Attach handlers to each file node
     function attachHandlers(node) {
@@ -669,17 +718,7 @@ export default function StepWizard() {
                   onClick={() => handleDataSourceChange('local')}
                   sx={{ flex: 1 }}
                   size="large"
-                  startIcon={
-                    <svg 
-                      width="20" 
-                      height="20" 
-                      viewBox="0 0 24 24" 
-                      fill="currentColor"
-                      style={{ marginRight: 8 }}
-                    >
-                      <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
-                    </svg>
-                  }
+                  startIcon={<UploadFileIcon />}
                 >
                   Local Files
                 </Button>
@@ -892,92 +931,193 @@ export default function StepWizard() {
                   border: '1px dashed #ccc',
                   borderRadius: 1
                 }}>
-                  <Typography variant="body2" textAlign="center">
-                    {dataSource === 's3' 
-                      ? 'No S3 files found. Please check your connection and path.'
-                      : dataSource === 'postgres'
-                      ? 'No PostgreSQL tables found. Please check your connection and schema selection.'
-                      : 'No local files uploaded. Please upload files to continue.'
-                    }
-                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <Typography variant="body2" textAlign="center">
+                      {dataSource === 's3' 
+                        ? 'No S3 files found. Please check your connection and path.'
+                        : dataSource === 'postgres'
+                        ? 'No PostgreSQL tables found. Please check your connection and schema selection.'
+                        : 'No local files uploaded. Please upload files to continue.'
+                      }
+                    </Typography>
+                    {dataSource === 'local' && (
+                      <Box sx={{ textAlign: 'center', fontSize: '12px', color: 'text.secondary' }}>
+                        <div>Debug Info:</div>
+                        <div>localFiles: {localFiles.length}</div>
+                        <div>filteredFiles: {filteredFiles.length}</div>
+                        <div>treeData keys: {Object.keys(treeData).length}</div>
+                        <div>Sample files: {localFiles.slice(0, 3).map(f => f.name).join(', ')}</div>
+                      </Box>
+                    )}
+                  </Box>
                 </Box>
               ) : (
-                <FileTree
-                  files={filteredFiles}
-                  selectedFiles={selectedFiles}
-                  onFileToggle={handleFileToggle}
-                  onFolderToggle={handleFolderToggle}
-                  onDelete={handleDelete}
-                  height={400}
-                  maxWidth="100%"
-                  isTreeData={false}
-                  dataSource={dataSource}
-                  postgresConfig={dataSource === 'postgres' ? postgresConfig : null}
-                />
-              )}
-              
-              {/* Drag and Drop Area for adding more files */}
-              {dataSource === 'local' && (
                 <Box
-                  sx={{
-                    border: '2px dashed',
-                    borderColor: localDragOver ? 'primary.main' : 'divider',
-                    borderRadius: 1,
-                    p: 2,
-                    mb: 2,
-                    textAlign: 'center',
-                    background: localDragOver ? 'action.hover' : 'inherit',
-                    cursor: 'pointer',
+                  sx={{ 
+                    position: 'relative',
+                    border: dataSource === 'local' ? '2px solid transparent' : 'none',
+                    borderRadius: 2,
                     transition: 'all 0.2s ease-in-out',
-                    minHeight: 80, // Same height as initial drag area
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
+                    '&:hover': {
+                      border: dataSource === 'local' ? '2px solid rgba(25, 118, 210, 0.3)' : '2px solid transparent'
+                    }
                   }}
                   onDragOver={(e) => {
-                    e.preventDefault();
-                    setLocalDragOver(true);
+                    if (dataSource === 'local') {
+                      e.preventDefault();
+                      e.currentTarget.style.border = '2px dashed #1976d2';
+                      e.currentTarget.style.background = 'rgba(25, 118, 210, 0.05)';
+                      // Show drag message only when something is being dragged
+                      setShowDragMessage(true);
+                    }
                   }}
                   onDragLeave={(e) => {
-                    e.preventDefault();
-                    setLocalDragOver(false);
+                    if (dataSource === 'local') {
+                      e.preventDefault();
+                      e.currentTarget.style.border = '';
+                      e.currentTarget.style.background = '';
+                      // Hide drag message when drag leaves
+                      setShowDragMessage(false);
+                    }
+                  }}
+                  onDragEnter={(e) => {
+                    if (dataSource === 'local') {
+                      e.preventDefault();
+                      // Show drag message when drag enters
+                      setShowDragMessage(true);
+                    }
                   }}
                   onDrop={async (e) => {
-                    e.preventDefault();
-                    setLocalDragOver(false);
-                    
-                    // Handle dropped items (can be files or directories)
-                    const items = Array.from(e.dataTransfer.items);
-                    console.log('Additional dropped items:', items.length);
-                    
-                    const files = [];
-                    
-                    // Process each dropped item
-                    for (const item of items) {
-                      if (item.kind === 'file') {
-                        const entry = item.webkitGetAsEntry();
-                        if (entry) {
-                          await processEntry(entry, files);
+                    if (dataSource === 'local') {
+                      e.preventDefault();
+                      e.currentTarget.style.border = '';
+                      e.currentTarget.style.background = '';
+                      
+                      console.log('Drop event triggered - hiding drag message');
+                      // Hide drag message when files are dropped
+                      setShowDragMessage(false);
+                      console.log('showDragMessage set to false');
+                      
+                      console.log('Drop event triggered');
+                      
+                      // Simple approach: just use the items for folder structure
+                      const items = Array.from(e.dataTransfer.items);
+                      console.log('Items to process:', items.length);
+                      
+                      const files = [];
+                      
+                      // Process each dropped item to maintain folder structure
+                      for (const item of items) {
+                        if (item.kind === 'file') {
+                          const entry = item.webkitGetAsEntry();
+                          if (entry) {
+                            console.log('Processing entry:', entry.name, 'isFile:', entry.isFile, 'isDirectory:', entry.isDirectory);
+                            await processEntry(entry, files);
+                          }
                         }
                       }
-                    }
-                    
-                    if (files.length > 0) {
-                      console.log('Processed additional dropped files:', files.length);
-                      console.log('Sample files:', files.slice(0, 3).map(f => ({ 
-                        name: f.name, 
-                        webkitRelativePath: f.webkitRelativePath || f.fullPath || f.name
-                      })));
-                      // Append new files to existing ones
-                      handleLocalUpload(files, true);
+                      
+                      console.log('Final processed files:', files);
+                      console.log('Files with webkitRelativePath:', files.filter(f => f.webkitRelativePath));
+                      
+                      if (files.length > 0) {
+                        console.log('FileTree container drop - processed files:', files.length);
+                        
+                        // Test: Check if files have proper structure
+                        const filesWithPaths = files.filter(f => f.webkitRelativePath && f.webkitRelativePath.includes('/'));
+                        console.log('Files with folder paths:', filesWithPaths.length);
+                        console.log('Sample folder structure:', filesWithPaths.slice(0, 3).map(f => ({
+                          name: f.name,
+                          path: f.webkitRelativePath,
+                          parts: f.webkitRelativePath.split('/')
+                        })));
+                        
+                        // Append new files to existing ones
+                        handleLocalUpload(files, true);
+                        console.log('After handleLocalUpload call');
+                      } else {
+                        console.log('No files were processed from drop');
+                      }
                     }
                   }}
                 >
-                  <Typography variant="body2" color="text.secondary">
-                    {localDragOver ? 'Drop files here to add more' : 'Drag and drop more files or folders here to add to your selection'}
-                  </Typography>
+                  {/* Subtle hint that drag and drop is available */}
+                  {dataSource === 'local' && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        backgroundColor: 'rgba(25, 118, 210, 0.9)',
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: 1,
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        zIndex: 5,
+                        opacity: 0,
+                        transition: 'opacity 0.2s ease-in-out',
+                        pointerEvents: 'none',
+                        '&:hover': {
+                          opacity: 1
+                        }
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.opacity = 1;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.opacity = 0;
+                      }}
+                    >
+                      💡 Drag files here
+                    </Box>
+                  )}
+                  
+                  {/* Friendly message about drag and drop capability - appears ONLY during drag */}
+                  {dataSource === 'local' && showDragMessage && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        color: 'white',
+                        padding: '8px 16px',
+                        borderRadius: 3,
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        zIndex: 5,
+                        opacity: showDragMessage ? 1 : 0,
+                        transition: 'opacity 0.2s ease-in-out',
+                        pointerEvents: 'none',
+                        maxWidth: '250px',
+                        textAlign: 'center',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      Drop files here to add more
+                    </Box>
+                  )}
+                  
+                  
+                  <FileTree
+                    files={filteredFiles}
+                    selectedFiles={selectedFiles}
+                    onFileToggle={handleFileToggle}
+                    onFolderToggle={handleFolderToggle}
+                    onDelete={handleDelete}
+                    height={400}
+                    maxWidth="100%"
+                    isTreeData={false}
+                    dataSource={dataSource}
+                    postgresConfig={dataSource === 'postgres' ? postgresConfig : null}
+                  />
                 </Box>
               )}
+              
+
               
               {selectedFiles.length > 0 && (
                 <Typography variant="body2" color="text.secondary" mt={1}>
