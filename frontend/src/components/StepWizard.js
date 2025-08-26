@@ -856,16 +856,6 @@ export default function StepWizard() {
             <CardContent sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
                 Select Files to Import
-                {selectedFiles.length > 0 && (
-                  <Typography 
-                    component="span" 
-                    variant="body2" 
-                    color="primary" 
-                    sx={{ ml: 2, fontWeight: 'normal' }}
-                  >
-                    ({selectedFiles.length} files selected)
-                  </Typography>
-                )}
               </Typography>
               
               {/* Show PostgreSQL error if any */}
@@ -1197,7 +1187,7 @@ export default function StepWizard() {
               </Typography>
             </CardContent>
             
-            <CardActions sx={{ justifyContent: 'center' }}>
+            <CardActions sx={{ justifyContent: 'center', mt: 4, mb: 4 }}>
               <Button variant="contained" onClick={handleRestart}>
                 Import More Files
               </Button>

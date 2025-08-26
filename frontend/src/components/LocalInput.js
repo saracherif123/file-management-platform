@@ -101,7 +101,7 @@ export default function LocalInput({
           transition: 'all 0.2s ease-in-out'
         }}
       >
-        <Typography variant="h6" color="primary" gutterBottom>
+        <Typography variant="body2" color="primary" gutterBottom>
           Drag & Drop Files and Folders Here
         </Typography>
       </DragDropArea>

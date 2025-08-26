@@ -388,7 +388,9 @@ export default function FileTree({
                 <span 
                   style={{ 
                     cursor: dataSource === 'postgres' && value.__file && value.__file.includes('.') ? 'pointer' : 'default',
-                    textDecoration: dataSource === 'postgres' && value.__file && value.__file.includes('.') ? 'underline' : 'none'
+                    textDecoration: dataSource === 'postgres' && value.__file && value.__file.includes('.') ? 'underline' : 'none',
+                    fontSize: '0.9rem',
+                    fontWeight: '500'
                   }}
                   onClick={() => {
                     if (dataSource === 'postgres' && value.__file && value.__file.includes('.') && !value.__file.includes('/')) {
@@ -471,7 +473,12 @@ export default function FileTree({
                   sx={{ p: 0, mr: 1 }}
                 />
                 {getFolderIcon(key, files)}
-                <span style={{ cursor: 'pointer', flex: 1 }}>
+                <span style={{ 
+                  cursor: 'pointer', 
+                  flex: 1,
+                  fontSize: '1rem',
+                  fontWeight: '600'
+                }}>
                   {key}
                 </span>
               </Box>
@@ -538,7 +545,7 @@ export default function FileTree({
         display: 'flex', 
         justifyContent: 'space-between',
         alignItems: 'center',
-        fontSize: '0.875rem',
+        fontSize: '0.9rem',
         color: 'text.secondary'
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -548,7 +555,7 @@ export default function FileTree({
             borderRadius: '50%', 
             backgroundColor: 'primary.main' 
           }} />
-          <span>
+          <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>
             {dataSource === 'postgres' ? 'Database Objects' : 
              dataSource === 's3' ? 'S3 Objects' : 
              'Local Files'}: {totalFiles} available
@@ -559,9 +566,9 @@ export default function FileTree({
           alignItems: 'center', 
           gap: 1,
           color: selectedCount > 0 ? 'primary.main' : 'text.secondary',
-          fontWeight: selectedCount > 0 ? 'medium' : 'normal'
+          fontWeight: selectedCount > 0 ? '600' : '500'
         }}>
-          <span>Selected: {selectedCount} {dataSource === 'postgres' ? 'objects' : 'files'}</span>
+          <span style={{ fontSize: '0.9rem' }}>Selected: {selectedCount} {dataSource === 'postgres' ? 'objects' : 'files'}</span>
         </Box>
       </Box>
       

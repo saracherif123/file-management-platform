@@ -90,7 +90,7 @@ const TablePreviewDialog = ({ open, onClose, tableData, loading, error }) => {
                           label={column.nullable === 'YES' ? 'NULL' : 'NOT NULL'} 
                           size="small" 
                           variant="outlined"
-                          color={column.nullable === 'YES' ? 'default' : 'error'}
+                          color={column.nullable === 'YES' ? 'default' : 'primary'}
                         />
                       </TableCell>
                       <TableCell>{column.default || '-'}</TableCell>
