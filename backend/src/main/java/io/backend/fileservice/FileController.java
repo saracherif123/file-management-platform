@@ -15,6 +15,7 @@ import java.util.UUID;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
@@ -293,9 +294,33 @@ public class FileController {
             Map<String, Object> result = new HashMap<>();
             result.put("files", allObjects);
             return ResponseEntity.ok(result);
+        } catch (SQLException e) {
+            Map<String, Object> error = new HashMap<>();
+            String errorMessage = e.getMessage();
+            
+            // Handle specific PostgreSQL error codes
+            if (errorMessage.contains("FATAL: password authentication failed")) {
+                error.put("error", "Authentication failed: Wrong username or password");
+                return ResponseEntity.status(401).body(error);
+            } else if (errorMessage.contains("FATAL: role") && errorMessage.contains("does not exist")) {
+                error.put("error", "User not found: The specified username does not exist");
+                return ResponseEntity.status(401).body(error);
+            } else if (errorMessage.contains("FATAL: database") && errorMessage.contains("does not exist")) {
+                error.put("error", "Database not found: The specified database does not exist");
+                return ResponseEntity.status(404).body(error);
+            } else if (errorMessage.contains("Connection refused") || errorMessage.contains("Connection timed out")) {
+                error.put("error", "Connection failed: Cannot connect to the database server. Please check if PostgreSQL is running and the host/port is correct");
+                return ResponseEntity.status(503).body(error);
+            } else if (errorMessage.contains("permission denied")) {
+                error.put("error", "Access denied: Insufficient permissions to access the database");
+                return ResponseEntity.status(403).body(error);
+            } else {
+                error.put("error", "Database error: " + errorMessage);
+                return ResponseEntity.status(500).body(error);
+            }
         } catch (Exception e) {
             Map<String, Object> error = new HashMap<>();
-            error.put("error", "Error: " + e.getMessage());
+            error.put("error", "Unexpected error: " + e.getMessage());
             return ResponseEntity.status(500).body(error);
         }
     }

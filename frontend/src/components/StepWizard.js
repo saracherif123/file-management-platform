@@ -52,6 +52,7 @@ export default function StepWizard() {
   });
   const [postgresFiles, setPostgresFiles] = useState([]);
   const [postgresLoading, setPostgresLoading] = useState(false);
+  const [postgresError, setPostgresError] = useState('');
   
   // Local files state
   const [localFiles, setLocalFiles] = useState([]);
@@ -181,6 +182,8 @@ export default function StepWizard() {
   // Handle PostgreSQL connection
   const handlePostgresConnect = async () => {
     setPostgresLoading(true);
+    setPostgresError(''); // Clear any previous errors
+    
     try {
       const response = await fetch('http://localhost:8080/rest/list-postgres-all-objects', {
         method: 'POST',
@@ -191,12 +194,28 @@ export default function StepWizard() {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Handle different HTTP status codes with specific error messages
+        if (response.status === 401) {
+          throw new Error('Authentication failed. Please check your username and password.');
+        } else if (response.status === 403) {
+          throw new Error('Access denied. Please check your database permissions.');
+        } else if (response.status === 404) {
+          throw new Error('Database not found. Please check your database name.');
+        } else if (response.status === 500) {
+          throw new Error('Database connection error. Please check your connection details.');
+        } else {
+          throw new Error(`Connection failed with status: ${response.status}`);
+        }
       }
 
       const data = await response.json();
       if (data.error) {
         throw new Error(data.error);
+      }
+
+      // Check if we have any files/tables
+      if (!data.files || data.files.length === 0) {
+        throw new Error('No tables or views found in the database. Please check your credentials.');
       }
 
       // Convert PostgreSQL table/view names to file-like objects
@@ -213,7 +232,24 @@ export default function StepWizard() {
 
     } catch (error) {
       console.error('Failed to connect to PostgreSQL:', error);
-      alert('Failed to connect to PostgreSQL: ' + error.message);
+      
+      // Set user-friendly error message
+      let errorMessage = error.message;
+      
+      // Handle specific database connection errors
+      if (error.message.includes('Authentication failed')) {
+        errorMessage = '❌ Wrong username or password. Please check your credentials.';
+      } else if (error.message.includes('Access denied')) {
+        errorMessage = '❌ Access denied. Please check your database permissions.';
+      } else if (error.message.includes('Database not found')) {
+        errorMessage = '❌ Database not found. Please check your database name.';
+      } else if (error.message.includes('Connection refused') || error.message.includes('ECONNREFUSED')) {
+        errorMessage = '❌ Cannot connect to database server. Please check if PostgreSQL is running and the host/port is correct.';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = '❌ Connection timeout. Please check your network and database server.';
+      }
+      
+      setPostgresError(errorMessage);
     } finally {
       setPostgresLoading(false);
     }
@@ -476,6 +512,7 @@ export default function StepWizard() {
     setS3Files([]);
     setPostgresConfig({ host: 'localhost', port: 5433, database: 'testdb', username: 'postgres', password: 'test123', schema: '' });
     setPostgresFiles([]);
+    setPostgresError(''); // Clear PostgreSQL error
     setLocalFiles([]);
     setSelectedFiles([]);
     setImportProgress({ jobId: null, progress: 0, isImporting: false, message: '' });
@@ -680,6 +717,7 @@ export default function StepWizard() {
                     onConfigChange={setPostgresConfig}
                     onConnect={handlePostgresConnect}
                     loading={postgresLoading}
+                    error={postgresError}
                   />
                 </Box>
               )}
@@ -700,6 +738,13 @@ export default function StepWizard() {
               <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
                 Select Files to Import
               </Typography>
+              
+              {/* Show PostgreSQL error if any */}
+              {dataSource === 'postgres' && postgresError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {postgresError}
+                </Alert>
+              )}
               
 
               
@@ -776,6 +821,8 @@ export default function StepWizard() {
                   <Typography variant="body2" textAlign="center">
                     {dataSource === 's3' 
                       ? 'No S3 files found. Please check your connection and path.'
+                      : dataSource === 'postgres'
+                      ? 'No PostgreSQL tables found. Please check your connection and schema selection.'
                       : 'No local files uploaded. Please upload files to continue.'
                     }
                   </Typography>
@@ -874,7 +921,7 @@ export default function StepWizard() {
               <Button
                 variant="contained"
                 onClick={handleImport}
-                disabled={selectedFiles.length === 0}
+                disabled={selectedFiles.length === 0 || (dataSource === 'postgres' && postgresFiles.length === 0)}
                 sx={{ ml: 'auto' }}
               >
                 Import Selected Files <ArrowForward />

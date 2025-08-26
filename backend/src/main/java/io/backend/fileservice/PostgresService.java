@@ -35,7 +35,7 @@ public class PostgresService {
     /**
      * Get all database objects (tables, views) recursively
      */
-    public List<String> getAllDatabaseObjects(PostgresRequest request) {
+    public List<String> getAllDatabaseObjects(PostgresRequest request) throws SQLException {
         List<String> allObjects = new ArrayList<>();
         
         try (Connection connection = createConnection(request)) {
@@ -58,8 +58,12 @@ public class PostgresService {
                     .collect(Collectors.toList()));
             }
             
+        } catch (SQLException e) {
+            // Re-throw SQL exceptions to be handled by the controller
+            throw e;
         } catch (Exception e) {
-            System.err.println("Error getting database objects: " + e.getMessage());
+            // Wrap other exceptions
+            throw new SQLException("Database error: " + e.getMessage(), e);
         }
         
         return allObjects;
