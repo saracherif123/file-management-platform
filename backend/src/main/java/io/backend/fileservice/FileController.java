@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.ArrayList;
 
 @CrossOrigin(origins = "http://localhost:3000")
 @RestController
@@ -385,6 +386,121 @@ public class FileController {
             error.put("error", "Failed to get table preview: " + e.getMessage());
             return ResponseEntity.status(500).body(error);
         }
+    }
+
+    @PostMapping("/load-postgres-progress")
+    public ResponseEntity<Map<String, Object>> loadPostgresFilesWithProgress(@RequestBody PostgresRequest postgresRequest) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("jobId", postgresRequest.getJobId());
+        
+        // Start processing in background thread
+        new Thread(() -> {
+            try {
+                List<String> tables = postgresRequest.getTables();
+                if (tables == null || tables.isEmpty()) {
+                    ImportProgress errorProgress = new ImportProgress();
+                    errorProgress.message = "No tables selected for import";
+                    errorProgress.status = "error";
+                    progressMap.put(postgresRequest.getJobId(), errorProgress);
+                    return;
+                }
+                
+                ImportProgress progress = new ImportProgress();
+                progress.total = tables.size();
+                progress.processed = 0;
+                progress.status = "processing";
+                
+                List<String> processedFiles = new ArrayList<>();
+                List<String> failedFiles = new ArrayList<>();
+                
+                for (int i = 0; i < tables.size(); i++) {
+                    String tableName = tables.get(i);
+                    try {
+                        progress.message = "Processing " + tableName + "...";
+                        
+                        // Extract schema and table name
+                        String schema = "public";
+                        String actualTableName = tableName;
+                        if (tableName.contains(".")) {
+                            String[] parts = tableName.split("\\.");
+                            if (parts.length == 2) {
+                                schema = parts[0];
+                                actualTableName = parts[1];
+                            }
+                        }
+                        
+                        // Get table data
+                        Map<String, Object> tableData = postgresService.getTableSample(postgresRequest, actualTableName, 1000);
+                        
+                        // Create a CSV-like representation of the table
+                        String csvContent = "";
+                        
+                        // Add headers
+                        @SuppressWarnings("unchecked")
+                        List<String> columns = (List<String>) tableData.get("columns");
+                        if (columns != null && !columns.isEmpty()) {
+                            csvContent += String.join(",", columns) + "\n";
+                        }
+                        
+                        // Add data rows
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> rows = (List<Map<String, Object>>) tableData.get("rows");
+                        if (rows != null) {
+                            for (Map<String, Object> row : rows) {
+                                List<String> rowValues = new ArrayList<>();
+                                for (String column : columns) {
+                                    Object value = row.get(column);
+                                    String stringValue = value != null ? value.toString() : "";
+                                    // Escape commas and quotes
+                                    if (stringValue.contains(",") || stringValue.contains("\"") || stringValue.contains("\n")) {
+                                        stringValue = "\"" + stringValue.replace("\"", "\"\"") + "\"";
+                                    }
+                                    rowValues.add(stringValue);
+                                }
+                                csvContent += String.join(",", rowValues) + "\n";
+                            }
+                        }
+                        
+                        // Save to file
+                        String fileName = tableName.replace(".", "_") + ".csv";
+                        java.nio.file.Path filePath = java.nio.file.Paths.get("uploads", fileName);
+                        java.nio.file.Files.createDirectories(filePath.getParent());
+                        java.nio.file.Files.write(filePath, csvContent.getBytes());
+                        
+                        processedFiles.add(tableName);
+                        progress.processed++;
+                        Thread.sleep(200); // Small delay to show progress
+                        
+                    } catch (Exception e) {
+                        String errorMsg = "Error processing " + tableName + ": " + e.getMessage();
+                        System.err.println(errorMsg);
+                        failedFiles.add(tableName + " (Error: " + e.getMessage() + ")");
+                        progress.processed++;
+                    }
+                }
+                
+                // Final status
+                String finalMessage = String.format("Import completed. Processed: %d, Failed: %d", 
+                    processedFiles.size(), failedFiles.size());
+                if (!failedFiles.isEmpty()) {
+                    finalMessage += ". Failed: " + String.join(", ", failedFiles);
+                }
+                
+                progress.message = finalMessage;
+                progress.status = failedFiles.isEmpty() ? "done" : "error";
+                progressMap.put(postgresRequest.getJobId(), progress);
+                
+            } catch (Exception e) {
+                String errorMsg = "PostgreSQL import failed: " + e.getMessage();
+                System.err.println(errorMsg);
+                ImportProgress errorProgress = new ImportProgress();
+                errorProgress.message = errorMsg;
+                errorProgress.status = "error";
+                progressMap.put(postgresRequest.getJobId(), errorProgress);
+            }
+        }).start();
+        
+        return ResponseEntity.ok(result);
     }
 
 

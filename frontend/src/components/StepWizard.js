@@ -187,7 +187,7 @@ export default function StepWizard() {
     setPostgresError(''); // Clear any previous errors
     
     try {
-      const response = await fetch('http://localhost:8080/rest/list-postgres-all-objects', {
+      const response = await fetch('http://localhost:8080/rest/list-postgres', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -485,18 +485,31 @@ export default function StepWizard() {
     setActiveStep(STEPS.IMPORT_PROGRESS);
     
     try {
-      const endpoint = dataSource === 's3' ? 'rest/load-s3-progress' : 'rest/load-local-progress';
-      const body = dataSource === 's3' 
-        ? { 
-            files: selectedFiles, 
-            jobId, 
-            accessKey: s3Config.accessKey,
-            secretKey: s3Config.secretKey,
-            bucket: s3Config.s3Path,
-            region: s3Config.region,
-            path: ''
-          }
-        : { files: selectedFiles, jobId };
+      let endpoint;
+      let body;
+      
+      if (dataSource === 's3') {
+        endpoint = 'rest/load-s3-progress';
+        body = { 
+          files: selectedFiles, 
+          jobId, 
+          accessKey: s3Config.accessKey,
+          secretKey: s3Config.secretKey,
+          bucket: s3Config.s3Path,
+          region: s3Config.region,
+          path: ''
+        };
+      } else if (dataSource === 'postgres') {
+        endpoint = 'rest/load-postgres-progress';
+        body = {
+          ...postgresConfig,
+          tables: selectedFiles,
+          jobId
+        };
+      } else {
+        endpoint = 'rest/load-local-progress';
+        body = { files: selectedFiles, jobId };
+      }
       
       const res = await fetch(`http://localhost:8080/${endpoint}`, {
         method: 'POST',
