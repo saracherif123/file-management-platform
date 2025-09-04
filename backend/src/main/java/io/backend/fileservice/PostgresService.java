@@ -10,6 +10,11 @@ public class PostgresService {
 
     /**
      * List all schemas, tables, and views in PostgreSQL
+     * Returns a map with:
+     * - "schemas": List of schema names
+     * - "files": List of database objects (tables and views) in schema.object format
+     * - "totalObjects": Total count of objects
+     * - "error": Error message if connection fails
      */
     public Map<String, Object> listPostgresContents(PostgresRequest request) {
         Map<String, Object> result = new HashMap<>();
@@ -30,43 +35,6 @@ public class PostgresService {
         }
         
         return result;
-    }
-
-    /**
-     * Get all database objects (tables, views) recursively
-     */
-    public List<String> getAllDatabaseObjects(PostgresRequest request) throws SQLException {
-        List<String> allObjects = new ArrayList<>();
-        
-        try (Connection connection = createConnection(request)) {
-            // Get all schemas
-            List<String> schemas = getSchemas(connection);
-            
-            // Get all tables and views from all schemas
-            for (String schema : schemas) {
-                List<String> tables = getTablesInSchema(connection, schema);
-                List<String> views = getViewsInSchema(connection, schema);
-                
-                // Add tables with schema prefix
-                allObjects.addAll(tables.stream()
-                    .map(table -> schema + "." + table)
-                    .collect(Collectors.toList()));
-                
-                // Add views with schema prefix
-                allObjects.addAll(views.stream()
-                    .map(view -> schema + "." + view)
-                    .collect(Collectors.toList()));
-            }
-            
-        } catch (SQLException e) {
-            // Re-throw SQL exceptions to be handled by the controller
-            throw e;
-        } catch (Exception e) {
-            // Wrap other exceptions
-            throw new SQLException("Database error: " + e.getMessage(), e);
-        }
-        
-        return allObjects;
     }
 
 
@@ -303,46 +271,5 @@ public class PostgresService {
         return result;
     }
 
-    /**
-     * Drop a database object (table or view)
-     */
-    public boolean dropDatabaseObject(PostgresRequest request, String objectName, String schema) throws SQLException {
-        try (Connection connection = createConnection(request)) {
-            // First check if it's a table or view
-            String checkQuery = "SELECT table_type FROM information_schema.tables WHERE table_schema = ? AND table_name = ?";
-            String objectType = null;
-            
-            try (PreparedStatement stmt = connection.prepareStatement(checkQuery)) {
-                stmt.setString(1, schema);
-                stmt.setString(2, objectName);
-                
-                try (ResultSet rs = stmt.executeQuery()) {
-                    if (rs.next()) {
-                        objectType = rs.getString("table_type");
-                    }
-                }
-            }
-            
-            if (objectType == null) {
-                return false; // Object doesn't exist
-            }
-            
-            // Drop the object
-            String dropQuery;
-            if ("VIEW".equals(objectType)) {
-                dropQuery = "DROP VIEW IF EXISTS " + schema + "." + objectName + " CASCADE";
-            } else {
-                dropQuery = "DROP TABLE IF EXISTS " + schema + "." + objectName + " CASCADE";
-            }
-            
-            try (Statement stmt = connection.createStatement()) {
-                stmt.executeUpdate(dropQuery);
-                return true;
-            }
-            
-        } catch (SQLException e) {
-            System.err.println("Error dropping database object: " + e.getMessage());
-            throw e;
-        }
-    }
+
 }

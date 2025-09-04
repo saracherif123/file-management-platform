@@ -279,22 +279,14 @@ public class FileController {
     public ResponseEntity<Map<String, Object>> listPostgres(@RequestBody PostgresRequest postgresRequest) {
         try {
             Map<String, Object> result = postgresService.listPostgresContents(postgresRequest);
+            
+            // Check if there was an error in the result
+            if (result.containsKey("error")) {
+                return ResponseEntity.status(500).body(result);
+            }
+            
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("error", "Error: " + e.getMessage());
-            return ResponseEntity.status(500).body(error);
-        }
-    }
-
-    @PostMapping("/list-postgres-all-objects")
-    public ResponseEntity<Map<String, Object>> listPostgresAllObjects(@RequestBody PostgresRequest postgresRequest) {
-        try {
-            List<String> allObjects = postgresService.getAllDatabaseObjects(postgresRequest);
-            Map<String, Object> result = new HashMap<>();
-            result.put("files", allObjects);
-            return ResponseEntity.ok(result);
-        } catch (SQLException e) {
             Map<String, Object> error = new HashMap<>();
             String errorMessage = e.getMessage();
             
@@ -318,12 +310,10 @@ public class FileController {
                 error.put("error", "Database error: " + errorMessage);
                 return ResponseEntity.status(500).body(error);
             }
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("error", "Unexpected error: " + e.getMessage());
-            return ResponseEntity.status(500).body(error);
         }
     }
+
+
 
     @PostMapping("/postgres-table-preview")
     public ResponseEntity<Map<String, Object>> getPostgresTablePreview(@RequestBody PostgresRequest postgresRequest) {
@@ -360,42 +350,5 @@ public class FileController {
         }
     }
 
-    @DeleteMapping("/postgres-drop-object")
-    public ResponseEntity<Map<String, Object>> dropPostgresObject(@RequestBody PostgresRequest postgresRequest) {
-        try {
-            String objectName = postgresRequest.getTable();
-            if (objectName == null || objectName.isEmpty()) {
-                Map<String, Object> error = new HashMap<>();
-                error.put("error", "Object name is required");
-                return ResponseEntity.badRequest().body(error);
-            }
 
-            // Extract schema and object name from schema.object format
-            String schema = "public"; // Default schema
-            String actualObjectName = objectName;
-            if (objectName.contains(".")) {
-                String[] parts = objectName.split("\\.");
-                if (parts.length == 2) {
-                    schema = parts[0];
-                    actualObjectName = parts[1];
-                }
-            }
-
-            boolean dropped = postgresService.dropDatabaseObject(postgresRequest, actualObjectName, schema);
-            
-            Map<String, Object> result = new HashMap<>();
-            if (dropped) {
-                result.put("message", "Object dropped successfully");
-                result.put("object", objectName);
-            } else {
-                result.put("error", "Failed to drop object");
-            }
-            
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("error", "Failed to drop object: " + e.getMessage());
-            return ResponseEntity.status(500).body(error);
-        }
-    }
 } 
