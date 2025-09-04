@@ -2,29 +2,30 @@ import React from 'react';
 import { Checkbox, Box, IconButton, Collapse } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { FaFileCsv, FaFileAlt, FaFileCode, FaFile, FaFolder, FaFilePdf, FaTrash, FaTable, FaEye, FaDatabase } from 'react-icons/fa';
+import { FaTrash } from 'react-icons/fa';
 import TablePreviewDialog from './TablePreviewDialog';
+import FileIconView from './FileIconView';
 
-// Helper function to get file icon
-function getFileIcon(filename, isPostgresTable = false) {
+// Helper function to get file type from filename
+function getFileType(filename, isPostgresTable = false) {
   // PostgreSQL tables
   if (isPostgresTable) {
-    return <FaTable color="#336791" style={{ marginRight: 8 }} />;
+    return 'TABLE';
   }
   
   // File extensions
-  if (filename.endsWith('.csv')) return <FaFileCsv color="#2a9d8f" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.json')) return <FaFileCode color="#e76f51" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.parquet')) return <FaFileAlt color="#264653" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.pdf')) return <FaFilePdf color="#e74c3c" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.txt')) return <FaFileAlt color="#6d6875" style={{ marginRight: 8 }} />;
-  if (filename.endsWith('.sql')) return <FaFileCode color="#f4a261" style={{ marginRight: 8 }} />;
+  if (filename.endsWith('.csv')) return 'CSV';
+  if (filename.endsWith('.json')) return 'JSON';
+  if (filename.endsWith('.parquet')) return 'PARQUET';
+  if (filename.endsWith('.pdf')) return 'PDF';
+  if (filename.endsWith('.txt')) return 'TXT';
+  if (filename.endsWith('.sql')) return 'SQL';
   
-  return <FaFile style={{ marginRight: 8 }} />;
+  return 'FILE';
 }
 
-// Helper function to get folder icon (for PostgreSQL schemas)
-function getFolderIcon(folderName, files) {
+// Helper function to get folder type
+function getFolderType(folderName, files) {
   // Check if this folder contains PostgreSQL objects (schema.table format)
   const hasPostgresObjects = files.some(file => {
     const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
@@ -32,10 +33,10 @@ function getFolderIcon(folderName, files) {
   });
   
   if (hasPostgresObjects) {
-    return <FaDatabase color="#336791" style={{ marginRight: 8 }} />;
+    return 'DATABASE';
   }
   
-  return <FaFolder color="#f4a261" style={{ marginRight: 8 }} />;
+  return 'FOLDER';
 }
 
 // Helper: Build a tree from file paths
@@ -336,7 +337,7 @@ export default function FileTree({
                   size="small"
                   sx={{ p: 0, mr: 1 }}
                 />
-                {getFileIcon(key, dataSource === 'postgres' && value.__file && value.__file.includes('.'))}
+                <FileIconView type={getFileType(key, dataSource === 'postgres' && value.__file && value.__file.includes('.'))} />
                 <span 
                   style={{ 
                     cursor: dataSource === 'postgres' && value.__file && value.__file.includes('.') ? 'pointer' : 'default',
@@ -417,7 +418,7 @@ export default function FileTree({
                   size="small"
                   sx={{ p: 0, mr: 1 }}
                 />
-                {getFolderIcon(key, files)}
+                <FileIconView type={getFolderType(key, files)} />
                 <span style={{ 
                   cursor: 'pointer', 
                   flex: 1,
@@ -530,4 +531,4 @@ export default function FileTree({
 }
 
 // Export helper functions for use in other components
-export { buildFileTree, collectAllFiles, getFolderCheckboxState, getFileIcon };
+export { buildFileTree, collectAllFiles, getFolderCheckboxState, getFileType };
