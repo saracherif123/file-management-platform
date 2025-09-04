@@ -38,3 +38,7 @@ backend/target/
 # Temporary files
 *.tmp
 *.temp
+
+# Uploaded files
+backend/uploads/
+

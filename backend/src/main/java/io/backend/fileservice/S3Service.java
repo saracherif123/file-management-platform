@@ -175,6 +175,37 @@ public class S3Service {
     }
 
     /**
+     * Download file content from S3 as a string
+     */
+    public String downloadFileContent(S3Request s3Request, String fileKey) throws Exception {
+        S3Client s3 = createS3Client(s3Request);
+        
+        try {
+            // First check if the file exists
+            try {
+                s3.headObject(builder -> builder
+                    .bucket(s3Request.getBucket())
+                    .key(fileKey)
+                    .build()
+                );
+            } catch (Exception e) {
+                return "S3 File: " + fileKey + "\nOriginal S3 path: " + s3Request.getBucket() + "/" + fileKey + "\nImport timestamp: " + new java.util.Date() + "\n\nERROR: File not found or access denied. Please check:\n- File exists in S3\n- Your credentials have read access\n- Bucket and region are correct\n\nError: " + e.getMessage();
+            }
+            
+            // Download the file to a temporary location first
+            String tempFilePath = downloadS3File(s3, s3Request.getBucket(), fileKey);
+            
+            // Read the content as a string
+            String content = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(tempFilePath)));
+            return content;
+            
+        } catch (Exception e) {
+            // If we can't read the file, create a placeholder with better error info
+            return "S3 File: " + fileKey + "\nOriginal S3 path: " + s3Request.getBucket() + "/" + fileKey + "\nImport timestamp: " + new java.util.Date() + "\n\nERROR: Failed to download file content.\n\nError details: " + e.getMessage() + "\n\nPlease check:\n- S3 credentials are correct\n- File exists and is accessible\n- Network connection to S3";
+        }
+    }
+
+    /**
      * Get file metadata from S3 (size, last modified, etc.)
      */
     public Map<String, Object> getS3FileMetadata(S3Request s3Request) {

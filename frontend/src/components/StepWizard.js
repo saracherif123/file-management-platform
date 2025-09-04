@@ -487,7 +487,15 @@ export default function StepWizard() {
     try {
       const endpoint = dataSource === 's3' ? 'rest/load-s3-progress' : 'rest/load-local-progress';
       const body = dataSource === 's3' 
-        ? { files: selectedFiles, jobId, s3Config }
+        ? { 
+            files: selectedFiles, 
+            jobId, 
+            accessKey: s3Config.accessKey,
+            secretKey: s3Config.secretKey,
+            bucket: s3Config.s3Path,
+            region: s3Config.region,
+            path: ''
+          }
         : { files: selectedFiles, jobId };
       
       const res = await fetch(`http://localhost:8080/${endpoint}`, {
