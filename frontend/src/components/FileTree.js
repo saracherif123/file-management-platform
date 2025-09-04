@@ -45,14 +45,6 @@ function buildFileTree(files, dataSource = 'local') {
     return {};
   }
   
-  console.log('buildFileTree: Processing', files.length, 'files');
-  console.log('buildFileTree: Sample files:', files.slice(0, 3).map(f => ({
-    name: f?.name,
-    webkitRelativePath: f?.webkitRelativePath,
-    type: typeof f,
-    isString: typeof f === 'string'
-  })));
-  
   const root = {};
   
   if (dataSource === 'postgres') {
@@ -74,7 +66,6 @@ function buildFileTree(files, dataSource = 'local') {
         
         // Add table as a file within the schema
         root[schema][table] = { __file: tableName };
-        console.log(`buildFileTree: Added table "${table}" to schema "${schema}"`);
       } else {
         // Fallback for non-schema.table format
         root[tableName] = { __file: tableName };
@@ -88,33 +79,25 @@ function buildFileTree(files, dataSource = 'local') {
       const path = file.webkitRelativePath || (typeof file === 'string' ? file : file.name);
       if (!path) continue; // Skip files without valid paths
       
-      console.log('buildFileTree: Processing path:', path);
       const parts = path.split('/');
-      console.log('buildFileTree: Path parts:', parts);
       
       let current = root;
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
-        console.log(`buildFileTree: Creating/accessing part ${i}: "${part}"`);
         
         if (!current[part]) {
           if (i === parts.length - 1) {
             // Last part - this is the file
             current[part] = { __file: path };
-            console.log(`buildFileTree: Created file node for "${part}"`);
           } else {
             // Intermediate part - this is a folder
             current[part] = {};
-            console.log(`buildFileTree: Created folder node for "${part}"`);
           }
         }
         current = current[part];
       }
     }
   }
-  
-  console.log('buildFileTree: Final tree structure:', root);
-  console.log('buildFileTree: Root keys:', Object.keys(root));
   
   return root;
 }
@@ -158,19 +141,11 @@ export default function FileTree({
   dataSource = 'local', // New prop to indicate data source type
   postgresConfig = null // New prop for PostgreSQL connection details
 }) {
-  console.log('FileTree: Component re-rendering with props:', { 
-    filesLength: files?.length, 
-    selectedFilesLength: selectedFiles?.length,
-    height,
-    maxWidth,
-    isTreeData
-  });
   // State to track which folders are expanded
   const [expandedItems, setExpandedItems] = React.useState(() => {
     // Try to restore expansion state from localStorage
     try {
       const saved = localStorage.getItem('fileTreeExpanded');
-      console.log('FileTree: Restoring expansion state from localStorage:', saved);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -219,12 +194,7 @@ export default function FileTree({
   
 
   
-  console.log('FileTree: Current expandedItems state:', expandedItems);
-  
-  // Log when expandedItems changes
-  React.useEffect(() => {
-    console.log('FileTree: expandedItems state changed to:', expandedItems);
-  }, [expandedItems]);
+
   
   // Build tree data with handlers attached
   const treeData = React.useMemo(() => {
@@ -282,7 +252,6 @@ export default function FileTree({
           newExpanded.add(schema);
         });
         const result = Array.from(newExpanded);
-        console.log('FileTree: Auto-expanding PostgreSQL schemas:', result);
         return result;
       });
     }
@@ -327,53 +296,36 @@ export default function FileTree({
           }
         });
         const result = Array.from(newExpanded);
-        console.log('FileTree: Auto-expanding folders, new state:', result);
         return result;
       });
     }
   }, [selectedFiles, treeData]);
   
   // Early return if no files or invalid data
-  console.log('FileTree: treeData check:', { 
-    treeData, 
-    type: typeof treeData, 
-    keys: Object.keys(treeData || {}),
-    length: Object.keys(treeData || {}).length 
-  });
-  
   if (!treeData || (typeof treeData === 'object' && Object.keys(treeData).length === 0)) {
-    console.log('FileTree: Early return triggered');
     return (
       <Box sx={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.secondary' }}>
         No files to display
       </Box>
     );
   }
-  
-  console.log('FileTree: Proceeding to render tree');
 
   // Helper: Recursively render the tree
   function renderTree(node, path = '', depth = 0) {
-    console.log('renderTree called with:', { node, path, depth, nodeKeys: Object.keys(node || {}) });
-    
     if (!node || typeof node !== 'object') {
-      console.log('renderTree: Invalid node, returning null');
       return null;
     }
     
     const elements = Object.entries(node).map(([key, value], idx) => {
-      console.log('Processing tree item:', { key, value, hasFile: value && value.__file, isObject: typeof value === 'object' });
       const id = path ? `${path}/${key}` : key;
       
       if (value && value.__file) {
         // Skip folder placeholders - don't render them
         if (key === '.folder_placeholder') {
-          console.log('Skipping folder placeholder:', key);
           return null;
         }
         
         // File node
-        console.log('Rendering file:', key);
         return (
           <Box key={id} sx={{ pl: (depth + 1) * 3, py: 0.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -424,12 +376,9 @@ export default function FileTree({
         );
       } else if (value && typeof value === 'object') {
         // Folder node
-        console.log('Rendering folder:', key, 'with children:', Object.keys(value));
         const childElements = renderTree(value, id, depth + 1);
         const hasVisibleChildren = childElements && childElements.some(child => child !== null);
         const isExpanded = expandedItems.includes(id);
-        
-        console.log('Folder has visible children:', hasVisibleChildren);
         
         const { checked, indeterminate } = getFolderCheckboxState(value, selectedFiles, id);
         return (
@@ -439,18 +388,14 @@ export default function FileTree({
                 <IconButton
                   size="small"
                   onClick={() => {
-                    console.log('FileTree: Toggling folder expansion for:', id, 'Current expanded:', expandedItems);
                     setExpandedItems(prev => {
                       const newExpanded = prev.includes(id) 
                         ? prev.filter(item => item !== id)
                         : [...prev, id];
                       
-                      console.log('FileTree: New expanded state:', newExpanded);
-                      
                       // Save to localStorage
                       try {
                         localStorage.setItem('fileTreeExpanded', JSON.stringify(newExpanded));
-                        console.log('FileTree: Saved to localStorage:', newExpanded);
                       } catch (e) {
                         console.warn('Could not save expansion state:', e);
                       }
@@ -509,7 +454,6 @@ export default function FileTree({
       return null;
     }).filter(element => element !== null);
     
-    console.log('renderTree returning elements:', elements);
     return elements;
   }
 

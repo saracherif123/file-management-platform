@@ -75,11 +75,6 @@ public class PostgresService {
      */
     private Connection createConnection(PostgresRequest request) throws SQLException {
 
-        System.out.println("Connecting to PostgreSQL at " + request.getHost() + ":" + request.getPort() + "/"
-                + request.getDatabase());
-        System.out.println("Using user: " + request.getUsername());
-        System.out.println("Using password: " + request.getPassword());
-
         String url = String.format("jdbc:postgresql://%s:%d/%s",
                 request.getHost(), request.getPort(), request.getDatabase());
 

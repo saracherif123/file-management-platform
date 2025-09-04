@@ -93,7 +93,6 @@ export default function StepWizard() {
   
   // Handle going back while preserving selected files
   const handleGoBack = () => {
-    console.log('Going back, preserving selected files:', selectedFiles.length);
     setActiveStep(STEPS.CONNECTION);
     // Note: We don't clear selectedFiles here, so they're preserved
   };
@@ -122,8 +121,6 @@ export default function StepWizard() {
         path = pathWithoutPrefix.substring(slashIndex + 1);
       }
       
-      console.log('Parsed S3 path:', { bucket, path, original: s3Path });
-      
       // Create the request body in the format the backend expects
       const requestBody = {
         accessKey: s3Config.accessKey,
@@ -132,8 +129,6 @@ export default function StepWizard() {
         bucket: bucket,
         path: path
       };
-      
-      console.log('Sending S3 request:', requestBody);
       
       // Get all files recursively to match local file behavior
       const response = await fetch('http://localhost:8080/rest/list-s3-all-files', {
@@ -148,7 +143,6 @@ export default function StepWizard() {
       }
       
       const result = await response.json();
-      console.log('S3 response:', result);
       
       if (result.error) {
         throw new Error(result.error);
@@ -157,12 +151,7 @@ export default function StepWizard() {
       // Extract all files recursively (no separate folders needed)
       const files = result.files || [];
       
-      console.log('S3 recursive files:', files);
-      console.log('S3 files count:', files.length);
-      console.log('S3 files sample paths:', files.slice(0, 5));
-      
       // Process S3 files exactly like local files - create same object structure
-      console.log('Creating S3 file objects to match local files');
       
       const s3FileList = files.map(file => ({
         name: file.split('/').pop(), // Just the filename
@@ -170,9 +159,6 @@ export default function StepWizard() {
         type: 'file',
         size: 0
       }));
-      
-      console.log('S3 file list created:', s3FileList.length, 'files');
-      console.log('Sample S3 paths:', s3FileList.slice(0, 5).map(f => f.webkitRelativePath));
       
       // Set the S3 files as a flat array (like local files)
       setS3Files(s3FileList);
@@ -319,18 +305,9 @@ export default function StepWizard() {
 
   // Handle local file upload
   const handleLocalUpload = (files, append = false) => {
-    console.log('Local upload received files:', files, 'append:', append);
-    console.log('Files length:', files.length);
-    console.log('First few files:', files.slice(0, 3).map(f => ({ 
-      name: f.name, 
-      webkitRelativePath: f.webkitRelativePath,
-      type: f.type,
-      size: f.size
-    })));
     
     // Check if we have files with webkitRelativePath (folder upload)
     const hasFolderStructure = files.some(file => file.webkitRelativePath && file.webkitRelativePath.includes('/'));
-    console.log('Has folder structure:', hasFolderStructure);
     
     // Validate that we have files
     if (!files || files.length === 0) {
@@ -341,21 +318,11 @@ export default function StepWizard() {
     
     if (append && localFiles.length > 0) {
       // Append new files to existing ones
-      console.log('Appending', files.length, 'new files to existing', localFiles.length, 'files');
       const combinedFiles = [...localFiles, ...files];
-      console.log('Combined files:', combinedFiles.length);
-      console.log('Sample combined files:', combinedFiles.slice(0, 3).map(f => ({
-        name: f.name,
-        webkitRelativePath: f.webkitRelativePath,
-        hasPath: !!f.webkitRelativePath
-      })));
-      console.log('About to set localFiles to:', combinedFiles.length, 'files');
       setLocalFiles(combinedFiles);
-      console.log('localFiles state updated');
       
       // Auto-select only the new files
       const newFilePaths = files.map(f => f.webkitRelativePath || f.name);
-      console.log('New file paths to select:', newFilePaths);
       setSelectedFiles(prev => {
         const newSelection = [...prev];
         newFilePaths.forEach(filePath => {
@@ -363,12 +330,10 @@ export default function StepWizard() {
             newSelection.push(filePath);
           }
         });
-        console.log('Updated selected files:', newSelection);
         return newSelection;
       });
     } else {
       // First upload - replace all files
-      console.log('Setting localFiles and advancing to step 2');
       setLocalFiles(files);
       // Auto-advance to file selection step after upload
       setActiveStep(STEPS.FILE_SELECTION);
@@ -389,7 +354,6 @@ export default function StepWizard() {
   
   // Handle file/folder deletion
   const handleDelete = (itemPath, itemType) => {
-    console.log('Deleting:', itemType, itemPath);
     
     if (dataSource === 'postgres') {
       // Handle PostgreSQL object deletion
@@ -465,7 +429,6 @@ export default function StepWizard() {
   
   // Handle folder selection
   const handleFolderToggle = (node, path = '') => {
-    console.log('handleFolderToggle called with:', { node, path });
     
     // Get all files recursively under this folder
     const getAllFilesInFolder = (folderNode, folderPath = '') => {
@@ -488,7 +451,6 @@ export default function StepWizard() {
     };
 
     const folderFiles = getAllFilesInFolder(node, path);
-    console.log('Files in folder:', folderFiles);
     
     // Check if all files in the folder are currently selected
     const allSelected = folderFiles.every(file => selectedFiles.includes(file));
@@ -609,14 +571,7 @@ export default function StepWizard() {
       }
     })();
     
-    console.log('getCurrentFiles: dataSource =', dataSource, 'returning', files.length, 'files');
-    if (dataSource === 'local') {
-      console.log('Sample local files:', files.slice(0, 3).map(f => ({
-        name: f?.name,
-        webkitRelativePath: f?.webkitRelativePath,
-        hasPath: !!f?.webkitRelativePath
-      })));
-    }
+
     
     return files;
   };
@@ -629,12 +584,7 @@ export default function StepWizard() {
       return [];
     }
     
-    console.log('getFilteredFiles: Processing', files.length, 'files');
-    console.log('Sample files before filtering:', files.slice(0, 3).map(f => ({
-      name: f?.name,
-      webkitRelativePath: f?.webkitRelativePath,
-      hasPath: !!f?.webkitRelativePath
-    })));
+
     
     // Apply filtering to files - same logic for both local and S3
     const filtered = files.filter(f => {
@@ -656,12 +606,7 @@ export default function StepWizard() {
       return matchesType && matchesSearch;
     });
     
-    console.log('getFilteredFiles: After filtering,', filtered.length, 'files remain');
-    console.log('Sample files after filtering:', filtered.slice(0, 3).map(f => ({
-      name: f?.name,
-      webkitRelativePath: f?.webkitRelativePath,
-      hasPath: !!f?.webkitRelativePath
-    })));
+
     
     return filtered;
   };
@@ -670,27 +615,13 @@ export default function StepWizard() {
   
   // Build tree data - both local and S3 now use the same strategy
   const treeData = React.useMemo(() => {
-    console.log('Building tree data with dataSource:', dataSource);
-    
     // Both local and S3 now use the same strategy: build tree from filteredFiles
     if (!filteredFiles || filteredFiles.length === 0) {
-      console.log('No files to build tree from, returning empty tree');
       return {};
     }
     
-    console.log('Building tree from filteredFiles:', filteredFiles);
-    console.log('Sample filtered files:', filteredFiles.slice(0, 3).map(f => ({
-      name: f?.name,
-      webkitRelativePath: f?.webkitRelativePath,
-      hasPath: !!f?.webkitRelativePath,
-      pathIncludesSlash: f?.webkitRelativePath?.includes('/')
-    })));
-    
     // Use the proper buildFileTree function to create hierarchical structure
-    console.log('About to call buildFileTree with', filteredFiles.length, 'files');
     const tree = buildFileTree(filteredFiles);
-    console.log('buildFileTree result:', tree);
-    console.log('Tree root keys:', Object.keys(tree));
     
     // Attach handlers to each file node
     function attachHandlers(node) {
@@ -704,7 +635,6 @@ export default function StepWizard() {
       }
     }
     attachHandlers(tree);
-    console.log('Tree after attaching handlers:', tree);
     
     return tree;
   }, [filteredFiles, selectedFiles, handleFileToggle, dataSource]);
@@ -790,7 +720,6 @@ export default function StepWizard() {
                       
                       // Handle dropped items (can be files or directories)
                       const items = Array.from(e.dataTransfer.items);
-                      console.log('Dropped items:', items.length);
                       
                       const files = [];
                       
@@ -805,11 +734,6 @@ export default function StepWizard() {
                       }
                       
                       if (files.length > 0) {
-                        console.log('Processed dropped files:', files.length);
-                        console.log('Sample files:', files.slice(0, 3).map(f => ({ 
-                          name: f.name, 
-                          webkitRelativePath: f.webkitRelativePath || f.fullPath || f.name
-                        })));
                         // First upload - don't append
                         handleLocalUpload(files, false);
                       }
@@ -1000,16 +924,11 @@ export default function StepWizard() {
                       e.currentTarget.style.border = '';
                       e.currentTarget.style.background = '';
                       
-                      console.log('Drop event triggered - hiding drag message');
                       // Hide drag message when files are dropped
                       setShowDragMessage(false);
-                      console.log('showDragMessage set to false');
-                      
-                      console.log('Drop event triggered');
                       
                       // Simple approach: just use the items for folder structure
                       const items = Array.from(e.dataTransfer.items);
-                      console.log('Items to process:', items.length);
                       
                       const files = [];
                       
@@ -1018,32 +937,14 @@ export default function StepWizard() {
                         if (item.kind === 'file') {
                           const entry = item.webkitGetAsEntry();
                           if (entry) {
-                            console.log('Processing entry:', entry.name, 'isFile:', entry.isFile, 'isDirectory:', entry.isDirectory);
                             await processEntry(entry, files);
                           }
                         }
                       }
                       
-                      console.log('Final processed files:', files);
-                      console.log('Files with webkitRelativePath:', files.filter(f => f.webkitRelativePath));
-                      
                       if (files.length > 0) {
-                        console.log('FileTree container drop - processed files:', files.length);
-                        
-                        // Test: Check if files have proper structure
-                        const filesWithPaths = files.filter(f => f.webkitRelativePath && f.webkitRelativePath.includes('/'));
-                        console.log('Files with folder paths:', filesWithPaths.length);
-                        console.log('Sample folder structure:', filesWithPaths.slice(0, 3).map(f => ({
-                          name: f.name,
-                          path: f.webkitRelativePath,
-                          parts: f.webkitRelativePath.split('/')
-                        })));
-                        
                         // Append new files to existing ones
                         handleLocalUpload(files, true);
-                        console.log('After handleLocalUpload call');
-                      } else {
-                        console.log('No files were processed from drop');
                       }
                     }
                   }}

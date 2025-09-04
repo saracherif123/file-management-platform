@@ -104,17 +104,13 @@ public class S3Service {
         }
         
         try {
-            System.out.println("Creating S3 client with region: " + s3Request.getRegion());
             S3Client s3 = createS3Client(s3Request);
-            System.out.println("S3 client created successfully");
             
             for (String fileKey : s3Request.getFiles()) {
                 try {
-                    System.out.println("Downloading file: " + fileKey + " from bucket: " + s3Request.getBucket());
                     // Download file from S3
                     String localFilePath = downloadS3File(s3, s3Request.getBucket(), fileKey);
                     processedFiles.add(localFilePath);
-                    System.out.println("Successfully downloaded: " + localFilePath);
                     
                     // Here you would typically:
                     // 1. Validate the file format (CSV, JSON, Parquet, etc.)
@@ -215,9 +211,6 @@ public class S3Service {
     }
 
     private S3Client createS3Client(S3Request s3Request) {
-        System.out.println("Creating S3 client with access key: " + s3Request.getAccessKey().substring(0, 4) + "...");
-        System.out.println("Secret key length: " + s3Request.getSecretKey().length());
-        
         AwsBasicCredentials awsCreds = AwsBasicCredentials.create(
             s3Request.getAccessKey(), s3Request.getSecretKey()
         );
@@ -228,18 +221,14 @@ public class S3Service {
             region = "eu-central-1"; // Default region (Frankfurt)
         }
         
-        System.out.println("Using region: " + region);
-        
         try {
             Region awsRegion = Region.of(region.trim());
-            System.out.println("AWS Region object created: " + awsRegion);
             
             S3Client client = S3Client.builder()
                 .region(awsRegion)
                 .credentialsProvider(StaticCredentialsProvider.create(awsCreds))
                 .build();
             
-            System.out.println("S3Client built successfully");
             return client;
         } catch (Exception e) {
             System.err.println("Error creating S3 client: " + e.getMessage());

@@ -128,7 +128,7 @@ export default function ImportWizard() {
     
     const jobId = crypto.randomUUID();
     setS3ImportProgress({ jobId, progress: 0, isImporting: true, message: 'Starting S3 import...' });
-    console.log('Importing S3 files:', { bucket, prefix, files: selectedS3Files });
+
     
     try {
       const res = await fetch('http://localhost:8080/rest/load-s3-progress', {

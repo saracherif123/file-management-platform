@@ -115,13 +115,10 @@ export default function FileManager() {
       return;
     }
     setUploading(true);
-    console.log('Uploading file:', file.name, 'size:', file.size);
     try {
       const res = await apiUploadFile(file);
       if (!res.ok) throw new Error('Upload failed');
-      console.log('Upload successful, response:', res);
       setSnackbar({ open: true, message: 'File uploaded successfully!', severity: 'success' });
-      console.log('Refreshing file list...');
       await fetchFiles(); // Ensure the file list is refreshed after upload
     } catch (err) {
       console.error('Upload failed:', err);

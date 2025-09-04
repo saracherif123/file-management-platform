@@ -10,8 +10,7 @@ function buildRestUri(endpoint, param = "") {
 }
 
 if (config.logging) {
-    console.log("DEPLOY: " + DEPLOY);
-    console.log("REST API: " + buildRestUri("<endpoint>"));
+    // Logging disabled for cleaner console output
 }
 
 export var changeDisplayedPage = { callback: () => {} };
